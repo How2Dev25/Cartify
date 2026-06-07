@@ -7,6 +7,7 @@ import "./globals.css";
 import { Navbar } from "./components/landing/navbar";
 import { Footer } from "./components/landing/footer";
 import LoadingAnimation from "./components/loading";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -17,8 +18,11 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Remove metadata export since we're using "use client"
-// Move metadata to a separate file or use next/head
+// Routes where navbar and footer should be hidden
+const hiddenNavFooterRoutes = [
+  "/dashboard",
+  "/admin",
+];
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -37,12 +41,17 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, [pathname, searchParams]);
 
+  // Check if current route should hide navbar and footer
+  const shouldHideNavFooter = hiddenNavFooterRoutes.some(
+    (route) => pathname === route || pathname?.startsWith(route)
+  );
+
   return (
     <>
       {isLoading && <LoadingAnimation />}
-      <Navbar />
+      {!shouldHideNavFooter && <Navbar />}
       {children}
-      <Footer />
+      {!shouldHideNavFooter && <Footer />}
     </>
   );
 }

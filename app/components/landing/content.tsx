@@ -215,7 +215,7 @@ function ProductCard({ product }: { product: typeof products[0] }) {
           <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
             <span className="product-price">₱{product.price}</span>
             {product.originalPrice && (
-              <span className="product-original">${product.originalPrice}</span>
+              <span className="product-original">₱{product.originalPrice}</span>
             )}
           </div>
 
@@ -240,12 +240,20 @@ function ProductCard({ product }: { product: typeof products[0] }) {
 export default function ProductSection() {
   const [sortBy, setSortBy] = useState("featured");
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const getSortedProducts = () => {
     let filtered =
       selectedCategory === "all"
         ? products
         : products.filter((p) => p.category === selectedCategory);
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      filtered = filtered.filter((p) =>
+        p.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
 
     switch (sortBy) {
       case "price-low":
@@ -293,6 +301,59 @@ export default function ProductSection() {
           color: #9ca3af;
           font-weight: 300;
           margin-top: 6px;
+        }
+
+        /* Search Bar */
+        .search-wrapper {
+          position: relative;
+          width: 100%;
+          max-width: 320px;
+        }
+        .search-icon {
+          position: absolute;
+          left: 14px;
+          top: 50%;
+          transform: translateY(-50%);
+          pointer-events: none;
+          color: #9ca3af;
+        }
+        .search-input {
+          width: 100%;
+          padding: 10px 16px 10px 40px;
+          border: 1px solid #e5e7eb;
+          border-radius: 100px;
+          font-size: 13px;
+          font-family: 'DM Sans', sans-serif;
+          background: #fff;
+          transition: all 0.2s;
+          outline: none;
+        }
+        .search-input:focus {
+          border-color: #f97316;
+          box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+        }
+        .search-input::placeholder {
+          color: #d1d5db;
+        }
+        .clear-search {
+          position: absolute;
+          right: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: #9ca3af;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 4px;
+          border-radius: 50%;
+          transition: background 0.2s;
+        }
+        .clear-search:hover {
+          background: #f3f4f6;
+          color: #6b7280;
         }
 
         /* Sort select */
@@ -507,16 +568,45 @@ export default function ProductSection() {
               <p className="section-sub">{sorted.length} items available</p>
             </div>
 
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="sort-select"
-            >
-              <option value="featured">Sort: Featured</option>
-              <option value="price-low">Price: Low to High</option>
-              <option value="price-high">Price: High to Low</option>
-              <option value="rating">Top Rated</option>
-            </select>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              {/* Search Bar */}
+              <div className="search-wrapper">
+                <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Search products..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                {searchQuery && (
+                  <button
+                    className="clear-search"
+                    onClick={() => setSearchQuery("")}
+                    aria-label="Clear search"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="sort-select"
+              >
+                <option value="featured">Sort: Featured</option>
+                <option value="price-low">Price: Low to High</option>
+                <option value="price-high">Price: High to Low</option>
+                <option value="rating">Top Rated</option>
+              </select>
+            </div>
           </div>
 
           {/* Category pills */}
@@ -535,8 +625,32 @@ export default function ProductSection() {
           {/* Grid */}
           {sorted.length === 0 ? (
             <div className="empty-state">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: "0 auto 16px", color: "#d1d5db" }}>
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
               <p style={{ fontSize: 16, fontWeight: 500, color: "#374151", marginBottom: 6 }}>No products found</p>
-              <p style={{ fontSize: 14 }}>Try a different category</p>
+              <p style={{ fontSize: 14 }}>Try adjusting your search or category filter</p>
+              <button
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedCategory("all");
+                }}
+                style={{
+                  marginTop: 20,
+                  padding: "8px 20px",
+                  background: "#f97316",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "100px",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                Clear Filters
+              </button>
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 20 }}>

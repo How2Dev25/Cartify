@@ -228,7 +228,7 @@ export function Navbar() {
           {/* Right side */}
           <div className="flex items-center gap-2">
             {/* Orders Icon */}
-            <Link href="/orders" className="icon-btn" aria-label="Orders">
+            <Link href={routes.orders} className="icon-btn" aria-label="Orders">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 7h-4.18A3 3 0 0 0 16 5.18V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v1.18A3 3 0 0 0 8.18 7H4"/>
                 <path d="M4 7v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7"/>

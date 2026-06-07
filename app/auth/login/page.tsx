@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import gsap from "gsap";
+import { routes } from "../../routes";
+
 
 // Product slides for the left panel
 const slides = [
@@ -642,7 +644,7 @@ export default function LoginPage() {
 
             {/* Footer */}
             <div className="rp-footer">
-              Don't have an account? <Link href="/signup">Sign up</Link>
+              Don't have an account? <Link href={routes.signup}>Sign up</Link>
             </div>
 
             {/* Demo hint */}
