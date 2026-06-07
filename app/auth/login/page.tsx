@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import gsap from "gsap";
+import { signIn, getCurrentUser } from "@/app/lib/auth";
 import { routes } from "../../routes";
-
 
 // Product slides for the left panel
 const slides = [
@@ -104,20 +104,68 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setIsLoading(true);
-    setTimeout(() => {
-      if (email === "demo@cartify.com" && password === "password") {
-        gsap.to(".rp-form-wrap", {
-          scale: 1.015, duration: 0.18, yoyo: true, repeat: 1,
-          onComplete: () => router.push("/"),
-        });
-      } else {
-        setError("Invalid email or password.");
-        gsap.to(".rp-form-wrap", {
-          x: -6, duration: 0.08, yoyo: true, repeat: 5,
-          onComplete: () => setIsLoading(false),
-        });
+
+    try {
+      // Sign in with Supabase
+      const { success, error: signInError } = await signIn(email, password);
+
+      if (!success) {
+        throw new Error(signInError || "Invalid email or password");
       }
-    }, 1400);
+
+      // Get current user to check role
+      const user = await getCurrentUser();
+      const isUserAdmin = user?.role === 'admin';
+
+      // Success animation
+      gsap.to(".rp-form-wrap", {
+        scale: 1.02,
+        duration: 0.2,
+        yoyo: true,
+        repeat: 1,
+        onComplete: () => {
+          // Redirect based on role
+          if (isUserAdmin) {
+            router.push("/admin");
+          } else {
+            router.push("/");
+          }
+        }
+      });
+    } catch (err: any) {
+      setError(err.message || "Invalid email or password");
+      // Error shake animation
+      gsap.to(".rp-form-wrap", {
+        x: -6,
+        duration: 0.08,
+        yoyo: true,
+        repeat: 5,
+        onComplete: () => setIsLoading(false)
+      });
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    setError("");
+    
+    try {
+      // For demo purposes - you can implement actual Google OAuth later
+      // This is a placeholder for Google sign in
+      setTimeout(async () => {
+        const user = await getCurrentUser();
+        const isUserAdmin = user?.role === 'admin';
+        
+        if (isUserAdmin) {
+          router.push("/admin");
+        } else {
+          router.push("/");
+        }
+      }, 1500);
+    } catch (err: any) {
+      setError("Google sign in failed");
+      setIsLoading(false);
+    }
   };
 
   const cur = slides[activeSlide];
@@ -555,8 +603,6 @@ export default function LoginPage() {
         <div className="lp-right" ref={rightRef}>
           <div className="rp-form-wrap">
 
-            {/* Logo */}
-           
             {/* Title */}
             <div className="rp-title">
               <h2>Welcome back</h2>
@@ -630,7 +676,7 @@ export default function LoginPage() {
             {/* Google */}
             <button
               className="rp-google rp-cta"
-              onClick={() => { setIsLoading(true); setTimeout(() => router.push("/"), 1500); }}
+              onClick={handleGoogleSignIn}
               disabled={isLoading}
             >
               <svg width="18" height="18" viewBox="0 0 24 24">
