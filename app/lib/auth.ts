@@ -142,6 +142,16 @@ export async function isAdmin() {
   return role === 'admin';
 }
 
+export async function isCustomer() {
+  const role = await getUserRole();
+  return role === 'customer';
+}
+
+export async function isSignedIn() {
+  const user = await getCurrentUser();
+  return !!user; // true if user exists, false if null
+}
+
 // ADD THIS FUNCTION - Local avatar upload (no Supabase Storage)
 export async function uploadAvatarLocally(userId: string, file: File) {
   try {

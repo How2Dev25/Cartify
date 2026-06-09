@@ -21,6 +21,7 @@ export const routes = {
   account: "/account",
   orders: "/account/orders",
   wishlist: "/account/wishlist",
+  profile: "/account/profile",
 
   // Cart & Checkout
   cart: "/cart",
