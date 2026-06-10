@@ -281,7 +281,7 @@ export function Navbar() {
           font-weight: 600;
           text-decoration: none;
           padding: 9px 18px;
-          border-radius: 100px;
+          border-radius: 5px;
           background: var(--brand);
           color: white;
           border: none;
