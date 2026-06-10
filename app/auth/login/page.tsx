@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import gsap from "gsap";
-import { signIn, getCurrentUser } from "@/app/lib/auth";
+import { signIn, getCurrentUser, signInWithGoogle } from "@/app/lib/auth";
 import { routes } from "../../routes";
 
 // Product slides for the left panel
@@ -134,36 +134,35 @@ export default function LoginPage() {
       });
     } catch (err: any) {
       setError(err.message || "Invalid email or password");
+      setIsLoading(false);
       // Error shake animation
       gsap.to(".rp-form-wrap", {
         x: -6,
         duration: 0.08,
         yoyo: true,
         repeat: 5,
-        onComplete: () => setIsLoading(false)
       });
     }
   };
 
+  // REPLACE THIS FUNCTION - Working Google Sign In
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     setError("");
     
     try {
-      // For demo purposes - you can implement actual Google OAuth later
-      // This is a placeholder for Google sign in
-      setTimeout(async () => {
-        const user = await getCurrentUser();
-        const isUserAdmin = user?.role === 'admin';
-        
-        if (isUserAdmin) {
-          router.push("/admin");
-        } else {
-          router.push("/");
-        }
-      }, 1500);
+      const { success, url, error } = await signInWithGoogle();
+      
+      if (!success) {
+        throw new Error(error || "Google sign in failed");
+      }
+      
+      // Redirect to Google OAuth page
+      if (url) {
+        window.location.href = url;
+      }
     } catch (err: any) {
-      setError("Google sign in failed");
+      setError(err.message || "Google sign in failed");
       setIsLoading(false);
     }
   };
@@ -693,10 +692,8 @@ export default function LoginPage() {
               Don't have an account? <Link href={routes.signup}>Sign up</Link>
             </div>
 
-            {/* Demo hint */}
-            <div className="rp-demo">
-              <strong>Demo:</strong> demo@cartify.com &nbsp;/&nbsp; password
-            </div>
+            
+          
 
           </div>
         </div>

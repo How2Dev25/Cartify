@@ -86,6 +86,90 @@ export async function signIn(email: string, password: string) {
   }
 }
 
+// Google Sign In - Always creates customer role
+export async function signInWithGoogle() {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        }
+      }
+    });
+
+    if (error) throw error;
+    
+    return { success: true, url: data.url };
+  } catch (error: any) {
+    console.error('Google sign in error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Handle OAuth callback - ALWAYS set role to 'customer'
+export async function handleAuthCallback() {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    
+    if (error) throw error;
+    
+    if (data.session) {
+      // Check if user exists in our users table
+      const { data: existingUser, error: fetchError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', data.session.user.id)
+        .single();
+
+      if (!existingUser && !fetchError) {
+        // Create user profile from Google data with role = 'customer'
+        const userMetadata = data.session.user.user_metadata;
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert({
+            id: data.session.user.id,
+            email: data.session.user.email,
+            first_name: userMetadata?.given_name || userMetadata?.full_name?.split(' ')[0] || '',
+            last_name: userMetadata?.family_name || userMetadata?.full_name?.split(' ').slice(1).join(' ') || '',
+            phone: '',
+            birth_date: null,
+            gender: '',
+            address_line1: '',
+            address_line2: '',
+            city: '',
+            province: '',
+            postal_code: '',
+            country: '',
+            role: 'customer', // IMPORTANT: Force customer role for Google sign-ins
+            avatar_url: userMetadata?.picture || null
+          });
+
+        if (insertError) {
+          console.error('Error creating user profile:', insertError);
+          return { success: false, error: insertError.message };
+        }
+      } else if (existingUser) {
+        // If user exists, ensure they have customer role (not admin)
+        if (existingUser.role !== 'customer') {
+          // Don't change role if they're admin from email/password signup
+          // This prevents Google from overriding admin accounts
+          console.warn('User exists with role:', existingUser.role);
+        }
+      }
+
+      return { success: true, user: data.session.user, role: 'customer' };
+    }
+    
+    return { success: false, error: 'No session found' };
+  } catch (error: any) {
+    console.error('Auth callback error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
@@ -114,10 +198,10 @@ export async function getCurrentUser() {
       return { 
         ...user, 
         profile: { 
-          first_name: user.user_metadata?.first_name || '',
-          last_name: user.user_metadata?.last_name || ''
+          first_name: user.user_metadata?.first_name || user.user_metadata?.given_name || '',
+          last_name: user.user_metadata?.last_name || user.user_metadata?.family_name || ''
         }, 
-        role: 'customer' 
+        role: 'customer' // Default to customer if no profile found
       };
     }
 
@@ -149,13 +233,12 @@ export async function isCustomer() {
 
 export async function isSignedIn() {
   const user = await getCurrentUser();
-  return !!user; // true if user exists, false if null
+  return !!user;
 }
 
-// ADD THIS FUNCTION - Local avatar upload (no Supabase Storage)
+// Avatar upload functions
 export async function uploadAvatarLocally(userId: string, file: File) {
   try {
-    // Convert file to base64
     const base64 = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
@@ -163,7 +246,6 @@ export async function uploadAvatarLocally(userId: string, file: File) {
       reader.readAsDataURL(file);
     });
 
-    // Store base64 directly in the users table (simplest approach)
     const { error: updateError } = await supabase
       .from('users')
       .update({ avatar_url: base64 })
@@ -171,7 +253,6 @@ export async function uploadAvatarLocally(userId: string, file: File) {
 
     if (updateError) throw updateError;
 
-    // Notify client UI that profile data changed so components can refresh
     try {
       if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
         window.dispatchEvent(new CustomEvent('user-profile-updated'));
@@ -187,7 +268,6 @@ export async function uploadAvatarLocally(userId: string, file: File) {
   }
 }
 
-// Alternative: If you prefer file system storage (requires API endpoint)
 export async function uploadAvatarToFilesystem(userId: string, file: File) {
   try {
     const formData = new FormData();
@@ -205,7 +285,6 @@ export async function uploadAvatarToFilesystem(userId: string, file: File) {
       throw new Error(data.error || 'Upload failed');
     }
 
-    // Store the URL in database
     const { error: updateError } = await supabase
       .from('users')
       .update({ avatar_url: data.url })
