@@ -18,11 +18,14 @@ interface Product {
   status: string;
   category: string;
   image_url: string | null;
-  rating: number;
-  reviews_count: number;
   is_new: boolean;
   is_featured: boolean;
   created_at: string;
+  images: string[];
+  details: string[];
+  sizes: string[];
+  colors: string[];
+  color_names: string[];
 }
 
 const categories = [
@@ -116,10 +119,7 @@ function ProductCard({ product }: { product: Product }) {
         </p>
         <h3 className="product-name">{product.name}</h3>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
-          <StarRating rating={product.rating} />
-          <span style={{ fontSize: 12, color: "#9ca3af" }}>({product.reviews_count})</span>
-        </div>
+        
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
@@ -197,8 +197,6 @@ export default function ProductSection() {
         return [...filtered].sort((a, b) => a.price - b.price);
       case "price-high":
         return [...filtered].sort((a, b) => b.price - a.price);
-      case "rating":
-        return [...filtered].sort((a, b) => b.rating - a.rating);
       default:
         // Featured: show is_featured first, then by creation date
         return [...filtered].sort((a, b) => {

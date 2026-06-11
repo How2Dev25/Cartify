@@ -375,29 +375,38 @@ export default function AdminUsersPage() {
   };
 
   // Delete user
-  const deleteUser = async (userId: string) => {
-    try {
-      const { error: deleteError } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', userId);
+ const deleteUser = async (userId: string) => {
+  try {
+    // Delete from users table
+    const { error: deleteError } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', userId);
 
-      if (deleteError) throw deleteError;
+    if (deleteError) throw deleteError;
 
-      const { error: authError } = await supabase.auth.admin.deleteUser(userId);
-      if (authError) console.error('Error deleting auth user:', authError);
+    // Call server API to delete from auth
+    const response = await fetch('/api/admin/users', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    });
 
-      setSuccess("User deleted successfully!");
-      closeDeleteConfirm();
-      await fetchUsers();
-      
-      setTimeout(() => setSuccess(""), 3000);
-    } catch (error: any) {
-      console.error('Error deleting user:', error);
-      setError(error.message);
-      setTimeout(() => setError(""), 3000);
+    if (!response.ok) {
+      console.error('Failed to delete auth user');
     }
-  };
+
+    setSuccess("User deleted successfully!");
+    closeDeleteConfirm();
+    await fetchUsers();
+    
+    setTimeout(() => setSuccess(""), 3000);
+  } catch (error: any) {
+    console.error('Error deleting user:', error);
+    setError(error.message);
+    setTimeout(() => setError(""), 3000);
+  }
+};
 
   const getFullName = (user: User) => {
     return [user.first_name, user.last_name].filter(Boolean).join(" ") || "N/A";

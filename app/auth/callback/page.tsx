@@ -18,6 +18,36 @@ export default function AuthCallback() {
       }
 
       if (session) {
+        // Get user metadata from different possible sources
+        const userMetadata = session.user.user_metadata || {};
+        
+        // Try multiple possible field names for Google OAuth
+        let firstName = '';
+        let lastName = '';
+        
+        // Google OAuth typically uses: given_name, family_name
+        if (userMetadata.given_name) {
+          firstName = userMetadata.given_name;
+          lastName = userMetadata.family_name || '';
+        }
+        // Some providers use: first_name, last_name
+        else if (userMetadata.first_name) {
+          firstName = userMetadata.first_name;
+          lastName = userMetadata.last_name || '';
+        }
+        // Fallback to full_name
+        else if (userMetadata.full_name) {
+          const nameParts = userMetadata.full_name.split(' ');
+          firstName = nameParts[0] || '';
+          lastName = nameParts.slice(1).join(' ') || '';
+        }
+        // Fallback to email username
+        else if (session.user.email) {
+          const emailParts = session.user.email.split('@');
+          firstName = emailParts[0] || '';
+          lastName = '';
+        }
+
         // Check if user exists in your users table
         const { data: existingUser } = await supabase
           .from('users')
@@ -32,14 +62,29 @@ export default function AuthCallback() {
             .insert({
               id: session.user.id,
               email: session.user.email,
-              first_name: session.user.user_metadata?.given_name || '',
-              last_name: session.user.user_metadata?.family_name || '',
+              first_name: firstName,
+              last_name: lastName,
               role: 'customer',
-              avatar_url: session.user.user_metadata?.picture || null
+              avatar_url: userMetadata.picture || userMetadata.avatar_url || null,
+              created_at: new Date().toISOString(),
             });
 
           if (insertError) {
             console.error('Error creating user:', insertError);
+          }
+        } else {
+          // Update existing user with latest info from OAuth
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({
+              first_name: firstName || existingUser.first_name,
+              last_name: lastName || existingUser.last_name,
+              avatar_url: userMetadata.picture || existingUser.avatar_url,
+            })
+            .eq('id', session.user.id);
+
+          if (updateError) {
+            console.error('Error updating user:', updateError);
           }
         }
 

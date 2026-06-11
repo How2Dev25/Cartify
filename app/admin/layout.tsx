@@ -63,9 +63,7 @@ export default function AdminLayout({
                 </svg>
               </button>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-500">Welcome, Admin</span>
-            </div>
+            
           </div>
         </header>
 
