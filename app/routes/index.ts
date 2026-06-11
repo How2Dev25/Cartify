@@ -32,7 +32,11 @@ export const routes = {
   admin: "/admin",
   adminProducts: "/admin/products",
   adminOrders: "/admin/orders",
+
+  // practice fetching data
+  practice: "/practice",
 };
+
 
 // Navigation menu items
 export const navigationItems = [

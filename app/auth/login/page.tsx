@@ -563,7 +563,7 @@ export default function LoginPage() {
         <div className="lp-left" style={{ background: cur.bg, transition: "background 0.9s ease" }}>
 
           {/* Wordmark */}
-          <Link href="/" className="lp-wordmark">Cart<span>ify</span></Link>
+        
 
           {/* Slides */}
           {slides.map((s, i) => {
@@ -597,6 +597,7 @@ export default function LoginPage() {
             );
           })}
         </div>
+
 
         {/* ── RIGHT PANEL ── */}
         <div className="lp-right" ref={rightRef}>
@@ -663,10 +664,16 @@ export default function LoginPage() {
                 <Link href="/forgot-password" className="rp-forgot">Forgot password?</Link>
               </div>
 
+              
+
               {/* Submit */}
               <button type="submit" className="rp-btn rp-cta" disabled={isLoading}>
                 {isLoading ? <span className="rp-btn-spinner" /> : "Sign In"}
               </button>
+
+             
+ 
+
             </form>
 
             {/* Or */}

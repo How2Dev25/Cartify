@@ -16,6 +16,12 @@ export default function AdminDashboardPage() {
     <div className="space-y-6 p-6 bg-gray-50 min-h-screen">
       <DashboardHeader timeRange={timeRange} onTimeRangeChange={setTimeRange} />
       <MetricsSection />
+
+
+       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <RecentUsers />
+        <RecentProducts />
+      </div>
       
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -26,10 +32,7 @@ export default function AdminDashboardPage() {
       <TopProductsChart />
 
       {/* Recent Users and Products Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <RecentUsers />
-        <RecentProducts />
-      </div>
+     
     </div>
   );
 }

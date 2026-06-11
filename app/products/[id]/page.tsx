@@ -1,202 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { routes } from "@/app/routes";
+import { supabase } from "@/app/lib/supabase";
 
-// ─── Data ────────────────────────────────────────────────────────────────────
-
-const allProducts = [
-  {
-    id: 1,
-    name: "Classic White Sneakers",
-    price: 89.99,
-    originalPrice: 129.99,
-    discount: 30,
-    rating: 4.5,
-    reviews: 128,
-    category: "Footwear",
-    inStock: true,
-    isNew: false,
-    description:
-      "Timeless white sneakers crafted from premium canvas with a vulcanised rubber sole. Versatile enough for any casual occasion — pair with denim, joggers, or a summer dress.",
-    details: ["Premium canvas upper", "Vulcanised rubber sole", "Cushioned insole", "Reinforced toe cap", "Unisex fit"],
-    images: [
-      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1607522370275-f6fd0642f4e2?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=700&h=700&fit=crop",
-    ],
-    sizes: ["36", "37", "38", "39", "40", "41", "42", "43", "44"],
-    colors: ["#f5f5f0", "#1a1a18", "#b45309"],
-    colorNames: ["White", "Black", "Tan"],
-  },
-  {
-    id: 2,
-    name: "Premium Leather Watch",
-    price: 199.99,
-    originalPrice: 299.99,
-    discount: 33,
-    rating: 4.8,
-    reviews: 89,
-    category: "Accessories",
-    inStock: true,
-    isNew: true,
-    description:
-      "A refined timepiece featuring a genuine leather strap and mineral crystal glass. The slim 8mm case sits flush on the wrist for an understated, elegant look that transitions seamlessly from boardroom to weekend.",
-    details: ["Japanese quartz movement", "Genuine leather strap", "Mineral crystal glass", "Water resistant 30m", "36mm case diameter"],
-    images: [
-      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1526045431048-f857369baa09?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1547996160-81dfa63595aa?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1508057198894-247b23fe5ade?w=700&h=700&fit=crop",
-    ],
-    sizes: ["One Size"],
-    colors: ["#92400e", "#1a1a18", "#6b7280"],
-    colorNames: ["Tan", "Black", "Silver"],
-  },
-  {
-    id: 3,
-    name: "Designer Handbag",
-    price: 149.99,
-    originalPrice: 249.99,
-    discount: 40,
-    rating: 4.7,
-    reviews: 234,
-    category: "Bags",
-    inStock: true,
-    isNew: false,
-    description:
-      "Structured top-handle bag in pebbled vegan leather. Spacious enough for daily essentials with an internal zipped pocket and card slots. The gold-tone hardware adds a luxe finish.",
-    details: ["Pebbled vegan leather", "Gold-tone hardware", "Top handle + detachable strap", "Internal zip pocket + 2 card slots", "Dimensions: 28 × 20 × 10 cm"],
-    images: [
-      "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1566150905458-1bf1fc113f0d?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1591561954557-26941169b49e?w=700&h=700&fit=crop",
-    ],
-    sizes: ["One Size"],
-    colors: ["#92400e", "#1a1a18", "#be185d"],
-    colorNames: ["Tan", "Black", "Berry"],
-  },
-  {
-    id: 4,
-    name: "Wireless Headphones",
-    price: 79.99,
-    originalPrice: 129.99,
-    discount: 38,
-    rating: 4.6,
-    reviews: 567,
-    category: "Electronics",
-    inStock: true,
-    isNew: true,
-    description:
-      "Studio-quality sound in an over-ear design. 40-hour battery, active noise cancellation, and a foldable frame make these the perfect travel companion. Connects to two devices simultaneously.",
-    details: ["40-hour battery life", "Active noise cancellation", "Bluetooth 5.2", "Dual-device pairing", "Foldable, travel-ready design"],
-    images: [
-      "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1545127398-14699f92334b?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1577174881658-0f30ed549adc?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1484704849700-f032a568e944?w=700&h=700&fit=crop",
-    ],
-    sizes: ["One Size"],
-    colors: ["#1a1a18", "#f5f5f0", "#dc2626"],
-    colorNames: ["Black", "White", "Red"],
-  },
-  {
-    id: 5,
-    name: "Sunglasses Collection",
-    price: 59.99,
-    originalPrice: 99.99,
-    discount: 40,
-    rating: 4.4,
-    reviews: 45,
-    category: "Accessories",
-    inStock: true,
-    isNew: false,
-    description: "UV400 polarised lenses in a lightweight acetate frame. Designed for all-day wear with a spring-hinge for a comfortable, secure fit.",
-    details: ["UV400 polarised lenses", "Acetate frame", "Spring-hinge temples", "Includes hard case & cloth", "Unisex style"],
-    images: [
-      "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1473496169904-658ba7574b0d?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1508296695146-257a814070b4?w=700&h=700&fit=crop",
-    ],
-    sizes: ["One Size"],
-    colors: ["#1a1a18", "#92400e", "#065f46"],
-    colorNames: ["Black", "Tortoise", "Olive"],
-  },
-  {
-    id: 6,
-    name: "Running Shoes",
-    price: 119.99,
-    originalPrice: 159.99,
-    discount: 25,
-    rating: 4.9,
-    reviews: 312,
-    category: "Footwear",
-    inStock: true,
-    isNew: true,
-    description: "Engineered mesh upper with responsive foam cushioning for long-distance comfort. The breathable construction keeps feet cool mile after mile.",
-    details: ["Engineered mesh upper", "Responsive foam midsole", "Rubber outsole grip", "Breathable lining", "Reflective details"],
-    images: [
-      "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=700&h=700&fit=crop",
-    ],
-    sizes: ["36", "37", "38", "39", "40", "41", "42", "43", "44"],
-    colors: ["#f97316", "#1a1a18", "#3b82f6"],
-    colorNames: ["Orange", "Black", "Blue"],
-  },
-  {
-    id: 7,
-    name: "Smart Watch",
-    price: 249.99,
-    originalPrice: 349.99,
-    discount: 28,
-    rating: 4.7,
-    reviews: 178,
-    category: "Electronics",
-    inStock: false,
-    isNew: false,
-    description: "Track your health, fitness and notifications from your wrist. Features heart-rate monitoring, GPS, sleep tracking and 7-day battery life in a scratch-resistant case.",
-    details: ["Heart-rate & SpO2 monitoring", "Built-in GPS", "7-day battery life", "Sapphire crystal glass", "Water resistant 50m"],
-    images: [
-      "https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1508057198894-247b23fe5ade?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1526045431048-f857369baa09?w=700&h=700&fit=crop",
-    ],
-    sizes: ["One Size"],
-    colors: ["#1a1a18", "#f5f5f0", "#f97316"],
-    colorNames: ["Black", "Silver", "Orange"],
-  },
-  {
-    id: 8,
-    name: "Leather Backpack",
-    price: 89.99,
-    originalPrice: 129.99,
-    discount: 30,
-    rating: 4.5,
-    reviews: 98,
-    category: "Bags",
-    inStock: true,
-    isNew: false,
-    description: "Full-grain leather backpack with a padded 15\" laptop sleeve and multiple organisational pockets. Ages beautifully — the more you use it, the better it looks.",
-    details: ["Full-grain leather", "Padded 15\" laptop sleeve", "Multiple interior pockets", "Adjustable padded straps", "Capacity: 22L"],
-    images: [
-      "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=700&h=700&fit=crop",
-      "https://images.unsplash.com/photo-1591561954557-26941169b49e?w=700&h=700&fit=crop",
-    ],
-    sizes: ["One Size"],
-    colors: ["#92400e", "#1a1a18"],
-    colorNames: ["Tan", "Black"],
-  },
-];
+interface Product {
+  id: string;
+  product_id: string;
+  name: string;
+  description: string;
+  price: number;
+  original_price: number;
+  discount: number;
+  stock: number;
+  status: string;
+  category: string;
+  image_url: string | null;
+  is_new: boolean;
+  is_featured: boolean;
+  created_at: string;
+  images: string[];
+  details: string[];
+  sizes: string[];
+  colors: string[];
+  color_names: string[];
+}
 
 // ─── Star Rating ──────────────────────────────────────────────────────────────
 
@@ -216,8 +46,10 @@ function Stars({ rating, size = 14 }: { rating: number; size?: number }) {
 
 // ─── Related product mini-card ────────────────────────────────────────────────
 
-function RelatedCard({ product }: { product: typeof allProducts[0] }) {
+function RelatedCard({ product }: { product: Product }) {
   const router = useRouter();
+  const displayImage = product.image_url || (product.images && product.images[0]) || "https://placehold.co/400x400?text=No+Image";
+  
   return (
     <div
       className="related-card"
@@ -225,13 +57,13 @@ function RelatedCard({ product }: { product: typeof allProducts[0] }) {
       style={{ cursor: "pointer" }}
     >
       <div style={{ aspectRatio: "1/1", overflow: "hidden", borderRadius: 12, background: "#f8f8f7", marginBottom: 12 }}>
-        <img src={product.images[0]} alt={product.name}
+        <img src={displayImage} alt={product.name}
           style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s ease" }}
           className="related-img" />
       </div>
       <p style={{ fontSize: 11, color: "#f97316", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", margin: "0 0 3px" }}>{product.category}</p>
       <p style={{ fontSize: 14, fontWeight: 500, color: "#111110", margin: "0 0 4px", lineHeight: 1.3 }}>{product.name}</p>
-      <p style={{ fontSize: 15, fontWeight: 600, color: "#f97316", margin: 0 }}>${product.price}</p>
+      <p style={{ fontSize: 15, fontWeight: 600, color: "#f97316", margin: 0 }}>₱{product.price.toFixed(2)}</p>
     </div>
   );
 }
@@ -241,8 +73,10 @@ function RelatedCard({ product }: { product: typeof allProducts[0] }) {
 export default function ProductPage() {
   const params = useParams();
   const router = useRouter();
-  const id = Number(params?.id);
-  const product = allProducts.find((p) => p.id === id) ?? allProducts[0];
+  const [product, setProduct] = useState<Product | null>(null);
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const [activeImg, setActiveImg] = useState(0);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
@@ -252,15 +86,115 @@ export default function ProductPage() {
   const [addedToCart, setAddedToCart] = useState(false);
   const [activeTab, setActiveTab] = useState<"description" | "details" | "reviews">("description");
 
-  const related = allProducts.filter((p) => p.id !== product.id && p.category === product.category).slice(0, 4);
-  const otherRelated = allProducts.filter((p) => p.id !== product.id && p.category !== product.category).slice(0, 4 - related.length);
-  const relatedProducts = [...related, ...otherRelated].slice(0, 4);
+  // Fetch product data
+  useEffect(() => {
+    const fetchProduct = async () => {
+      try {
+        setLoading(true);
+        const productId = params?.id as string;
+
+        // Fetch current product
+        const { data: productData, error: productError } = await supabase
+          .from("products")
+          .select("*")
+          .eq("id", productId)
+          .single();
+
+        if (productError) throw productError;
+        if (!productData) throw new Error("Product not found");
+
+        setProduct(productData);
+
+        // Fetch related products (same category, excluding current)
+        const { data: relatedData, error: relatedError } = await supabase
+          .from("products")
+          .select("*")
+          .eq("category", productData.category)
+          .neq("id", productData.id)
+          .limit(4);
+
+        if (!relatedError && relatedData && relatedData.length > 0) {
+          setRelatedProducts(relatedData);
+        } else {
+          // Fallback: fetch any other products if no same-category products
+          const { data: otherData, error: otherError } = await supabase
+            .from("products")
+            .select("*")
+            .neq("id", productData.id)
+            .limit(4);
+
+          if (!otherError && otherData) {
+            setRelatedProducts(otherData);
+          }
+        }
+      } catch (err: any) {
+        console.error("Error fetching product:", err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (params?.id) {
+      fetchProduct();
+    }
+  }, [params?.id]);
+
+  // Get images array (use images JSON or fallback to single image_url)
+  const getProductImages = () => {
+    if (!product) return [];
+    if (product.images && product.images.length > 0) {
+      return product.images;
+    }
+    if (product.image_url) {
+      return [product.image_url];
+    }
+    return ["https://placehold.co/700x700?text=No+Image"];
+  };
+
+  const productImages = getProductImages();
+  const inStock = product?.stock ? product.stock > 0 : false;
 
   const handleAddToCart = () => {
-    if (!product.inStock) return;
+    if (!inStock) return;
     setAddedToCart(true);
     setTimeout(() => setAddedToCart(false), 2200);
   };
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#fafaf9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 48, height: 48, border: "4px solid #f3f4f6", borderTopColor: "#f97316", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 16px" }} />
+          <p style={{ color: "#9ca3af" }}>Loading product...</p>
+        </div>
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#fafaf9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center" }}>
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="1.5" style={{ margin: "0 auto 16px" }}>
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <p style={{ fontSize: 18, fontWeight: 500, color: "#374151", marginBottom: 8 }}>Product not found</p>
+          <p style={{ fontSize: 14, color: "#9ca3af", marginBottom: 24 }}>{error || "The product you're looking for doesn't exist."}</p>
+          <Link href={routes.products} style={{ padding: "10px 24px", background: "#f97316", color: "#fff", borderRadius: 100, textDecoration: "none", fontSize: 14, fontWeight: 500 }}>
+            Browse Products
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -417,7 +351,7 @@ export default function ProductPage() {
             <span className="breadcrumb-sep">›</span>
             <Link href={routes.products} className="breadcrumb a">Products</Link>
             <span className="breadcrumb-sep">›</span>
-            <Link href={`${routes.products}?cat=${product.category.toLowerCase()}`} className="breadcrumb a">{product.category}</Link>
+            <Link href={`${routes.products}?cat=${product.category}`} className="breadcrumb a">{product.category}</Link>
             <span className="breadcrumb-sep">›</span>
             <span className="breadcrumb-current">{product.name}</span>
           </nav>
@@ -430,7 +364,7 @@ export default function ProductPage() {
 
               {/* Thumbnails */}
               <div className="gallery-thumbs" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {product.images.map((img, i) => (
+                {productImages.map((img, i) => (
                   <img key={i} src={img} alt={`${product.name} view ${i + 1}`}
                     className={`thumb${activeImg === i ? " active" : ""}`}
                     onClick={() => setActiveImg(i)} />
@@ -440,31 +374,31 @@ export default function ProductPage() {
               {/* Main image */}
               <div style={{ flex: 1, borderRadius: 20, overflow: "hidden", background: "#f8f8f7", position: "relative", aspectRatio: "1/1" }}>
                 <img
-                  src={product.images[activeImg]}
+                  src={productImages[activeImg]}
                   alt={product.name}
                   className="main-img"
                 />
                 {/* Badges */}
                 <div style={{ position: "absolute", top: 16, left: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-                  {product.isNew && (
+                  {product.is_new && (
                     <span style={{ background: "#111110", color: "#fff", fontSize: 10, fontWeight: 600, padding: "4px 10px", borderRadius: 100, letterSpacing: "0.08em", textTransform: "uppercase" }}>New</span>
                   )}
                   {product.discount > 0 && (
                     <span style={{ background: "#f97316", color: "#fff", fontSize: 10, fontWeight: 600, padding: "4px 10px", borderRadius: 100 }}>-{product.discount}%</span>
                   )}
-                  {!product.inStock && (
+                  {!inStock && (
                     <span style={{ background: "#f3f4f6", color: "#6b7280", fontSize: 10, fontWeight: 500, padding: "4px 10px", borderRadius: 100 }}>Out of Stock</span>
                   )}
                 </div>
 
                 {/* Nav arrows */}
-                {product.images.length > 1 && (
+                {productImages.length > 1 && (
                   <>
-                    <button onClick={() => setActiveImg((i) => (i - 1 + product.images.length) % product.images.length)}
+                    <button onClick={() => setActiveImg((i) => (i - 1 + productImages.length) % productImages.length)}
                       style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.88)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
                     </button>
-                    <button onClick={() => setActiveImg((i) => (i + 1) % product.images.length)}
+                    <button onClick={() => setActiveImg((i) => (i + 1) % productImages.length)}
                       style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.88)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.2" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
                     </button>
@@ -482,22 +416,19 @@ export default function ProductPage() {
                 {product.name}
               </h1>
 
-              {/* Rating */}
+              {/* Rating - Removed since no rating in DB */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-                <Stars rating={product.rating} size={15} />
-                <span style={{ fontSize: 14, fontWeight: 500, color: "#374151" }}>{product.rating}</span>
-                <span style={{ fontSize: 13, color: "#9ca3af" }}>({product.reviews} reviews)</span>
-                {product.inStock
-                  ? <span style={{ fontSize: 12, fontWeight: 500, color: "#16a34a", background: "#f0fdf4", padding: "3px 10px", borderRadius: 100 }}>● In Stock</span>
+                {inStock
+                  ? <span style={{ fontSize: 12, fontWeight: 500, color: "#16a34a", background: "#f0fdf4", padding: "3px 10px", borderRadius: 100 }}>● In Stock ({product.stock} units)</span>
                   : <span style={{ fontSize: 12, fontWeight: 500, color: "#dc2626", background: "#fef2f2", padding: "3px 10px", borderRadius: 100 }}>● Out of Stock</span>
                 }
               </div>
 
               {/* Price */}
               <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 28 }}>
-                <span style={{ fontSize: 32, fontWeight: 700, color: "#f97316", letterSpacing: "-0.02em" }}>${product.price}</span>
-                {product.originalPrice && (
-                  <span style={{ fontSize: 18, color: "#d1d5db", textDecoration: "line-through" }}>${product.originalPrice}</span>
+                <span style={{ fontSize: 32, fontWeight: 700, color: "#f97316", letterSpacing: "-0.02em" }}>₱{product.price.toFixed(2)}</span>
+                {product.original_price > 0 && (
+                  <span style={{ fontSize: 18, color: "#d1d5db", textDecoration: "line-through" }}>₱{product.original_price.toFixed(2)}</span>
                 )}
                 {product.discount > 0 && (
                   <span style={{ fontSize: 13, fontWeight: 600, color: "#f97316", background: "#fff3ed", padding: "3px 10px", borderRadius: 100 }}>Save {product.discount}%</span>
@@ -505,10 +436,10 @@ export default function ProductPage() {
               </div>
 
               {/* Color selector */}
-              {product.colors.length > 1 && (
+              {product.colors && product.colors.length > 1 && (
                 <div style={{ marginBottom: 24 }}>
                   <p style={{ fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 10 }}>
-                    Color — <span style={{ color: "#111110", fontWeight: 600 }}>{product.colorNames[selectedColor]}</span>
+                    Color — <span style={{ color: "#111110", fontWeight: 600 }}>{product.color_names?.[selectedColor] || "Default"}</span>
                   </p>
                   <div style={{ display: "flex", gap: 10 }}>
                     {product.colors.map((c, i) => (
@@ -517,7 +448,7 @@ export default function ProductPage() {
                         className={`color-swatch${selectedColor === i ? " active" : ""}`}
                         style={{ background: c }}
                         onClick={() => setSelectedColor(i)}
-                        aria-label={product.colorNames[i]}
+                        aria-label={product.color_names?.[i]}
                       />
                     ))}
                   </div>
@@ -525,11 +456,11 @@ export default function ProductPage() {
               )}
 
               {/* Size selector */}
-              {product.sizes[0] !== "One Size" && (
+              {product.sizes && product.sizes.length > 0 && product.sizes[0] !== "One Size" && (
                 <div style={{ marginBottom: 24 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                     <p style={{ fontSize: 13, fontWeight: 500, color: "#374151", margin: 0 }}>
-                      Size {selectedSize && <span style={{ color: "#111110", fontWeight: 600 }}>— EU {selectedSize}</span>}
+                      Size {selectedSize && <span style={{ color: "#111110", fontWeight: 600 }}>— {selectedSize}</span>}
                     </p>
                     <Link href={routes.sizing} style={{ fontSize: 12, color: "#f97316", textDecoration: "underline", textUnderlineOffset: 3 }}>Size guide</Link>
                   </div>
@@ -547,13 +478,13 @@ export default function ProductPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 100, padding: "6px 14px" }}>
                   <button className="qty-btn" style={{ border: "none", background: "none" }} onClick={() => setQty((q) => Math.max(1, q - 1))}>−</button>
                   <span style={{ fontSize: 15, fontWeight: 600, minWidth: 20, textAlign: "center" }}>{qty}</span>
-                  <button className="qty-btn" style={{ border: "none", background: "none" }} onClick={() => setQty((q) => q + 1)}>+</button>
+                  <button className="qty-btn" style={{ border: "none", background: "none" }} onClick={() => setQty((q) => Math.min(product.stock, q + 1))} disabled={!inStock || qty >= product.stock}>+</button>
                 </div>
 
                 {/* Add to cart */}
                 <button
                   className={`btn-cart${addedToCart ? " added" : ""}`}
-                  disabled={!product.inStock}
+                  disabled={!inStock}
                   onClick={handleAddToCart}
                 >
                   {addedToCart ? (
@@ -561,7 +492,7 @@ export default function ProductPage() {
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>
                       Added to Cart
                     </>
-                  ) : product.inStock ? (
+                  ) : inStock ? (
                     <>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
                       Add to Cart
@@ -612,7 +543,6 @@ export default function ProductPage() {
               {(["description", "details", "reviews"] as const).map((tab) => (
                 <button key={tab} className={`tab-btn${activeTab === tab ? " active" : ""}`} onClick={() => setActiveTab(tab)}>
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                  {tab === "reviews" && <span style={{ marginLeft: 6, fontSize: 12, color: "#9ca3af" }}>({product.reviews})</span>}
                 </button>
               ))}
             </div>
@@ -620,11 +550,19 @@ export default function ProductPage() {
 
           <div style={{ padding: "32px 0 0", maxWidth: 680 }}>
             {activeTab === "description" && (
-              <p style={{ fontSize: 15, lineHeight: 1.8, color: "#4b5563", fontWeight: 300 }}>{product.description}</p>
+              <p style={{ fontSize: 15, lineHeight: 1.8, color: "#4b5563", fontWeight: 300 }}>
+                {product.description || "No description available for this product."}
+              </p>
             )}
             {activeTab === "details" && (
               <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-                {product.details.map((d) => (
+                {(product.details && product.details.length > 0 ? product.details : [
+                  `Product ID: ${product.product_id}`,
+                  `Category: ${product.category}`,
+                  `Stock: ${product.stock} units available`,
+                  product.is_new ? "New Arrival" : null,
+                  product.is_featured ? "Featured Product" : null,
+                ].filter(Boolean) as string[]).map((d) => (
                   <li key={d} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14, color: "#374151" }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>
                     {d}
@@ -636,13 +574,13 @@ export default function ProductPage() {
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 20, padding: "24px", background: "#fff", borderRadius: 16, border: "1px solid #f0f0ee", marginBottom: 24 }}>
                   <div style={{ textAlign: "center" }}>
-                    <p style={{ fontSize: 48, fontWeight: 700, color: "#111110", margin: 0, lineHeight: 1 }}>{product.rating}</p>
-                    <Stars rating={product.rating} size={16} />
-                    <p style={{ fontSize: 12, color: "#9ca3af", margin: "6px 0 0" }}>{product.reviews} reviews</p>
+                    <p style={{ fontSize: 48, fontWeight: 700, color: "#111110", margin: 0, lineHeight: 1 }}>0</p>
+                    <Stars rating={0} size={16} />
+                    <p style={{ fontSize: 12, color: "#9ca3af", margin: "6px 0 0" }}>0 reviews</p>
                   </div>
                   <div style={{ flex: 1 }}>
                     {[5,4,3,2,1].map((star) => {
-                      const pct = star === 5 ? 62 : star === 4 ? 24 : star === 3 ? 9 : star === 2 ? 3 : 2;
+                      const pct = 0;
                       return (
                         <div key={star} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                           <span style={{ fontSize: 12, color: "#9ca3af", width: 8 }}>{star}</span>
@@ -656,7 +594,7 @@ export default function ProductPage() {
                     })}
                   </div>
                 </div>
-                <p style={{ fontSize: 14, color: "#9ca3af", textAlign: "center" }}>Detailed reviews coming soon.</p>
+                <p style={{ fontSize: 14, color: "#9ca3af", textAlign: "center" }}>Be the first to review this product!</p>
               </div>
             )}
           </div>
