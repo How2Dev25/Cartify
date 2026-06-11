@@ -1,124 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes";
+import { supabase } from "@/app/lib/supabase";
 
-const products = [
-  {
-    id: 1,
-    name: "Classic White Sneakers",
-    price: 89.99,
-    originalPrice: 129.99,
-    discount: 30,
-    rating: 4.5,
-    reviews: 128,
-    image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=400&fit=crop",
-    category: "footwear",
-    inStock: true,
-    isNew: false,
-    isFeatured: true,
-  },
-  {
-    id: 2,
-    name: "Premium Leather Watch",
-    price: 199.99,
-    originalPrice: 299.99,
-    discount: 33,
-    rating: 4.8,
-    reviews: 89,
-    image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop",
-    category: "accessories",
-    inStock: true,
-    isNew: true,
-    isFeatured: true,
-  },
-  {
-    id: 3,
-    name: "Designer Handbag",
-    price: 149.99,
-    originalPrice: 249.99,
-    discount: 40,
-    rating: 4.7,
-    reviews: 234,
-    image: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=400&h=400&fit=crop",
-    category: "bags",
-    inStock: true,
-    isNew: false,
-    isFeatured: true,
-  },
-  {
-    id: 4,
-    name: "Wireless Headphones",
-    price: 79.99,
-    originalPrice: 129.99,
-    discount: 38,
-    rating: 4.6,
-    reviews: 567,
-    image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop",
-    category: "electronics",
-    inStock: true,
-    isNew: true,
-    isFeatured: true,
-  },
-  {
-    id: 5,
-    name: "Sunglasses Collection",
-    price: 59.99,
-    originalPrice: 99.99,
-    discount: 40,
-    rating: 4.4,
-    reviews: 45,
-    image: "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop",
-    category: "accessories",
-    inStock: true,
-    isNew: false,
-    isFeatured: false,
-  },
-  {
-    id: 6,
-    name: "Running Shoes",
-    price: 119.99,
-    originalPrice: 159.99,
-    discount: 25,
-    rating: 4.9,
-    reviews: 312,
-    image: "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=400&h=400&fit=crop",
-    category: "footwear",
-    inStock: true,
-    isNew: true,
-    isFeatured: false,
-  },
-  {
-    id: 7,
-    name: "Smart Watch",
-    price: 249.99,
-    originalPrice: 349.99,
-    discount: 28,
-    rating: 4.7,
-    reviews: 178,
-    image: "https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=400&h=400&fit=crop",
-    category: "electronics",
-    inStock: false,
-    isNew: false,
-    isFeatured: false,
-  },
-  {
-    id: 8,
-    name: "Leather Backpack",
-    price: 89.99,
-    originalPrice: 129.99,
-    discount: 30,
-    rating: 4.5,
-    reviews: 98,
-    image: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop",
-    category: "bags",
-    inStock: true,
-    isNew: false,
-    isFeatured: false,
-  },
-];
+interface Product {
+  id: string;
+  product_id: string;
+  name: string;
+  description: string;
+  price: number;
+  original_price: number;
+  discount: number;
+  stock: number;
+  status: string;
+  category: string;
+  image_url: string | null;
+  rating: number;
+  reviews_count: number;
+  is_new: boolean;
+  is_featured: boolean;
+  created_at: string;
+}
 
 const categories = [
   { key: "all", label: "All" },
@@ -126,6 +31,7 @@ const categories = [
   { key: "accessories", label: "Accessories" },
   { key: "bags", label: "Bags" },
   { key: "electronics", label: "Electronics" },
+  { key: "clothing", label: "Clothing" },
 ];
 
 function StarRating({ rating }: { rating: number }) {
@@ -148,9 +54,11 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-function ProductCard({ product }: { product: typeof products[0] }) {
+function ProductCard({ product }: { product: Product }) {
   const [wished, setWished] = useState(false);
   const router = useRouter();
+  const inStock = product.stock > 0;
+  const displayImage = product.image_url || "https://placehold.co/400x400?text=No+Image";
 
   return (
     <div
@@ -160,17 +68,17 @@ function ProductCard({ product }: { product: typeof products[0] }) {
     >
       {/* Image */}
       <div className="product-img-wrap">
-        <img src={product.image} alt={product.name} className="product-img" />
+        <img src={displayImage} alt={product.name} className="product-img" />
 
         {/* Badges */}
         <div style={{ position: "absolute", top: 12, left: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-          {product.isNew && (
+          {product.is_new && (
             <span className="badge-new">New</span>
           )}
           {product.discount > 0 && (
             <span className="badge-discount">-{product.discount}%</span>
           )}
-          {!product.inStock && (
+          {!inStock && (
             <span className="badge-oos">Out of Stock</span>
           )}
         </div>
@@ -203,25 +111,27 @@ function ProductCard({ product }: { product: typeof products[0] }) {
 
       {/* Info */}
       <div className="product-info">
-        <p className="product-category">{product.category}</p>
+        <p className="product-category">
+          {categories.find(c => c.key === product.category)?.label || product.category || "General"}
+        </p>
         <h3 className="product-name">{product.name}</h3>
 
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
           <StarRating rating={product.rating} />
-          <span style={{ fontSize: 12, color: "#9ca3af" }}>({product.reviews})</span>
+          <span style={{ fontSize: 12, color: "#9ca3af" }}>({product.reviews_count})</span>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-            <span className="product-price">₱{product.price}</span>
-            {product.originalPrice && (
-              <span className="product-original">₱{product.originalPrice}</span>
+            <span className="product-price">₱{product.price.toFixed(2)}</span>
+            {product.original_price > 0 && (
+              <span className="product-original">₱{product.original_price.toFixed(2)}</span>
             )}
           </div>
 
           <button
-            className={`add-cart-btn${!product.inStock ? " disabled" : ""}`}
-            disabled={!product.inStock}
+            className={`add-cart-btn${!inStock ? " disabled" : ""}`}
+            disabled={!inStock}
             onClick={(e) => e.stopPropagation()}
             aria-label="Add to cart"
           >
@@ -238,16 +148,42 @@ function ProductCard({ product }: { product: typeof products[0] }) {
 }
 
 export default function ProductSection() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState("featured");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const getSortedProducts = () => {
-    let filtered =
-      selectedCategory === "all"
-        ? products
-        : products.filter((p) => p.category === selectedCategory);
-    
+  // Fetch products from Supabase
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setProducts(data || []);
+      } catch (error: any) {
+        console.error('Error fetching products:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  const getFilteredAndSortedProducts = () => {
+    let filtered = products;
+
+    // Apply category filter
+    if (selectedCategory !== "all") {
+      filtered = filtered.filter((p) => p.category === selectedCategory);
+    }
+
     // Apply search filter
     if (searchQuery.trim()) {
       filtered = filtered.filter((p) =>
@@ -255,6 +191,7 @@ export default function ProductSection() {
       );
     }
 
+    // Apply sorting
     switch (sortBy) {
       case "price-low":
         return [...filtered].sort((a, b) => a.price - b.price);
@@ -263,11 +200,37 @@ export default function ProductSection() {
       case "rating":
         return [...filtered].sort((a, b) => b.rating - a.rating);
       default:
-        return filtered;
+        // Featured: show is_featured first, then by creation date
+        return [...filtered].sort((a, b) => {
+          if (a.is_featured === b.is_featured) {
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          }
+          return a.is_featured ? -1 : 1;
+        });
     }
   };
 
-  const sorted = getSortedProducts();
+  const filteredProducts = getFilteredAndSortedProducts();
+
+  if (loading) {
+    return (
+      <section className="products-section">
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px" }}>
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 400 }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ width: 48, height: 48, border: "4px solid #f3f4f6", borderTopColor: "#f97316", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 16px" }}></div>
+              <p style={{ color: "#9ca3af" }}>Loading products...</p>
+            </div>
+          </div>
+        </div>
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </section>
+    );
+  }
 
   return (
     <>
@@ -565,7 +528,7 @@ export default function ProductSection() {
               <h2 className="section-title">
                 Featured <span>Products</span>
               </h2>
-              <p className="section-sub">{sorted.length} items available</p>
+              <p className="section-sub">{filteredProducts.length} items available</p>
             </div>
 
             <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -623,7 +586,7 @@ export default function ProductSection() {
           </div>
 
           {/* Grid */}
-          {sorted.length === 0 ? (
+          {filteredProducts.length === 0 ? (
             <div className="empty-state">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: "0 auto 16px", color: "#d1d5db" }}>
                 <circle cx="11" cy="11" r="8" />
@@ -654,7 +617,7 @@ export default function ProductSection() {
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 20 }}>
-              {sorted.map((product) => (
+              {filteredProducts.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
             </div>

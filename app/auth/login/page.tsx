@@ -563,7 +563,7 @@ export default function LoginPage() {
         <div className="lp-left" style={{ background: cur.bg, transition: "background 0.9s ease" }}>
 
           {/* Wordmark */}
-          <Link href="/" className="lp-wordmark">Cart<span>ify</span></Link>
+        
 
           {/* Slides */}
           {slides.map((s, i) => {

@@ -496,7 +496,7 @@ export default function AdminProductsPage() {
       {showModal && (
         <div 
           ref={modalRef}
-          className="fixed inset-0 flex items-center justify-center z-50 p-4 bg-black bg-opacity-50"
+          className="fixed inset-0 flex items-center justify-center z-50 p-4 "
           onClick={(e) => {
             if (e.target === e.currentTarget) closeModal();
           }}
@@ -713,7 +713,7 @@ export default function AdminProductsPage() {
       {deleteConfirm && (
         <div 
           ref={deleteModalRef}
-          className="fixed inset-0 flex items-center justify-center z-50 p-4 bg-black bg-opacity-50"
+          className="fixed inset-0 flex items-center justify-center z-50 p-4 "
           onClick={(e) => {
             if (e.target === e.currentTarget) closeDeleteConfirm();
           }}
