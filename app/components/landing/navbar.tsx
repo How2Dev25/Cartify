@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { getCurrentUser, signOut, isCustomer } from "@/app/lib/auth";
 import { supabase } from "@/app/lib/supabase";
 import { routes } from "../../routes";
+import { getCartItemCount } from "@/app/lib/cart";
 
 const links = [
   { href: routes.products, label: "Products" },
@@ -19,47 +20,70 @@ export function Navbar() {
   const [user, setUser] = useState<any>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [cartCount, setCartCount] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-
-   useEffect(() => {
+  useEffect(() => {
     const checkRole = async () => {
       const customer = await isCustomer();
-
       if (!customer) {
         await signOut();
       }
     };
-
     checkRole();
   }, []);
 
-  
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Load user and cart count
   useEffect(() => {
     const loadUser = async () => {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
       setAvatarUrl(currentUser?.profile?.avatar_url || null);
+      
+      // Load cart count if user is logged in
+      if (currentUser) {
+        const count = await getCartItemCount(currentUser.id);
+        setCartCount(count);
+      }
     };
 
     loadUser();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, _session) => {
-      loadUser();
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, _session) => {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      setAvatarUrl(currentUser?.profile?.avatar_url || null);
+      
+      // Reload cart count on auth change
+      if (currentUser) {
+        const count = await getCartItemCount(currentUser.id);
+        setCartCount(count);
+      } else {
+        setCartCount(0);
+      }
     });
 
     const onProfileUpdated = () => loadUser();
     window.addEventListener('user-profile-updated', onProfileUpdated);
 
+    // Listen for cart updates
+    const handleCartUpdate = () => {
+      if (user) {
+        getCartItemCount(user.id).then(setCartCount);
+      }
+    };
+    window.addEventListener('cart-updated', handleCartUpdate);
+
     return () => {
       try { window.removeEventListener('user-profile-updated', onProfileUpdated); } catch (e) {}
+      try { window.removeEventListener('cart-updated', handleCartUpdate); } catch (e) {}
       try {
         // @ts-ignore
         authListener?.subscription?.unsubscribe?.();
@@ -67,21 +91,12 @@ export function Navbar() {
         authListener?.unsubscribe?.();
       } catch (e) {}
     };
-  }, []);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [user?.id]);
 
   const handleSignOut = async () => {
     await signOut();
     setUser(null);
+    setCartCount(0);
     setDropdownOpen(false);
     router.push("/");
   };
@@ -101,6 +116,18 @@ export function Navbar() {
     const lastName = user?.profile?.last_name || user?.user_metadata?.last_name || "";
     return [firstName, lastName].filter(Boolean).join(" ") || "My Account";
   };
+
+  // Refresh cart count when navigating back to page
+  useEffect(() => {
+    const refreshCartCount = () => {
+      if (user) {
+        getCartItemCount(user.id).then(setCartCount);
+      }
+    };
+    
+    window.addEventListener('focus', refreshCartCount);
+    return () => window.removeEventListener('focus', refreshCartCount);
+  }, [user]);
 
   return (
     <>
@@ -693,14 +720,16 @@ export function Navbar() {
                   </svg>
                 </Link>
 
-                {/* Cart */}
+                {/* Cart with badge */}
                 <Link href="/cart" className="nav-icon-btn" aria-label="Cart" title="Cart">
                   <svg viewBox="0 0 24 24">
                     <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
                     <line x1="3" y1="6" x2="21" y2="6"/>
                     <path d="M16 10a4 4 0 01-8 0"/>
                   </svg>
-                  <span className="badge">0</span>
+                  {cartCount > 0 && (
+                    <span className="badge">{cartCount > 99 ? '99+' : cartCount}</span>
+                  )}
                 </Link>
               </>
             )}
@@ -763,7 +792,7 @@ export function Navbar() {
                       <span className="dropdown-item-icon">
                         <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
                       </span>
-                      My Cart
+                      My Cart {cartCount > 0 && `(${cartCount})`}
                     </Link>
 
                     <div className="dropdown-sep" />
@@ -844,7 +873,7 @@ export function Navbar() {
               </Link>
               <Link href="/cart" className="mobile-action-btn" onClick={() => setMobileOpen(false)}>
                 <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-                My Cart
+                My Cart {cartCount > 0 && `(${cartCount})`}
               </Link>
               <div className="mobile-divider" />
               <button className="mobile-action-btn danger" onClick={handleSignOut}>

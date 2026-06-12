@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { routes } from "@/app/routes";
 import { supabase } from "@/app/lib/supabase";
+import { addToCart, getCartItemCount } from "@/app/lib/cart";
 
 interface Product {
   id: string;
@@ -77,6 +78,7 @@ export default function ProductPage() {
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [cartError, setCartError] = useState("");
 
   const [activeImg, setActiveImg] = useState(0);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
@@ -85,6 +87,8 @@ export default function ProductPage() {
   const [wished, setWished] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
   const [activeTab, setActiveTab] = useState<"description" | "details" | "reviews">("description");
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
 
   // Fetch product data
   useEffect(() => {
@@ -140,6 +144,18 @@ export default function ProductPage() {
     }
   }, [params?.id]);
 
+  // Load cart count on mount
+  useEffect(() => {
+    const loadCartCount = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const count = await getCartItemCount(user.id);
+        setCartCount(count);
+      }
+    };
+    loadCartCount();
+  }, []);
+
   // Get images array (use images JSON or fallback to single image_url)
   const getProductImages = () => {
     if (!product) return [];
@@ -155,10 +171,68 @@ export default function ProductPage() {
   const productImages = getProductImages();
   const inStock = product?.stock ? product.stock > 0 : false;
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!inStock) return;
-    setAddedToCart(true);
-    setTimeout(() => setAddedToCart(false), 2200);
+    if (!product) return;
+    
+    setIsAddingToCart(true);
+    setCartError("");
+
+    try {
+      // Get current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        // Redirect to login if not authenticated
+        router.push(`/auth/login?redirect=${routes.productDetail(product.id)}`);
+        return;
+      }
+
+      // Add to cart using the cart function
+      const result = await addToCart(
+        user.id,
+        product.id,
+        qty,
+        product.price,
+        selectedSize || undefined,
+        product.colors?.[selectedColor],
+        product.color_names?.[selectedColor]
+      );
+
+      if (result.success) {
+        setAddedToCart(true);
+        // Update cart count
+        const newCount = await getCartItemCount(user.id);
+        setCartCount(newCount);
+        
+        // Show success message and reset after delay
+        setTimeout(() => {
+          setAddedToCart(false);
+        }, 2200);
+      } else {
+        setCartError(result.message);
+        // Shake animation on error
+        const btn = document.querySelector('.btn-cart');
+        if (btn) {
+          btn.animate([
+            { transform: 'translateX(0px)' },
+            { transform: 'translateX(-10px)' },
+            { transform: 'translateX(10px)' },
+            { transform: 'translateX(-5px)' },
+            { transform: 'translateX(5px)' },
+            { transform: 'translateX(0px)' }
+          ], {
+            duration: 300,
+            iterations: 1
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error('Error adding to cart:', err);
+      setCartError(err.message || 'Failed to add item to cart');
+    } finally {
+      setIsAddingToCart(false);
+    }
   };
 
   if (loading) {
@@ -340,6 +414,20 @@ export default function ProductPage() {
           .thumb { width: 60px !important; height: 60px !important; }
           .related-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
+
+        /* Error message */
+        .cart-error {
+          color: #dc2626;
+          font-size: 12px;
+          margin-top: 8px;
+          text-align: center;
+          animation: shake 0.3s ease-in-out;
+        }
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
+        }
       `}</style>
 
       <div className="pdp-root">
@@ -355,6 +443,13 @@ export default function ProductPage() {
             <span className="breadcrumb-sep">›</span>
             <span className="breadcrumb-current">{product.name}</span>
           </nav>
+
+          {/* Cart Error Display */}
+          {cartError && (
+            <div className="cart-error mb-4">
+              {cartError}
+            </div>
+          )}
 
           {/* Main layout */}
           <div className="pdp-grid" style={{ display: "flex", gap: 56, alignItems: "flex-start" }}>
@@ -416,7 +511,7 @@ export default function ProductPage() {
                 {product.name}
               </h1>
 
-              {/* Rating - Removed since no rating in DB */}
+              {/* Stock Status */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
                 {inStock
                   ? <span style={{ fontSize: 12, fontWeight: 500, color: "#16a34a", background: "#f0fdf4", padding: "3px 10px", borderRadius: 100 }}>● In Stock ({product.stock} units)</span>
@@ -476,18 +571,36 @@ export default function ProductPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
                 {/* Quantity */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 100, padding: "6px 14px" }}>
-                  <button className="qty-btn" style={{ border: "none", background: "none" }} onClick={() => setQty((q) => Math.max(1, q - 1))}>−</button>
+                  <button 
+                    className="qty-btn" 
+                    style={{ border: "none", background: "none" }} 
+                    onClick={() => setQty((q) => Math.max(1, q - 1))}
+                    disabled={isAddingToCart}
+                  >−</button>
                   <span style={{ fontSize: 15, fontWeight: 600, minWidth: 20, textAlign: "center" }}>{qty}</span>
-                  <button className="qty-btn" style={{ border: "none", background: "none" }} onClick={() => setQty((q) => Math.min(product.stock, q + 1))} disabled={!inStock || qty >= product.stock}>+</button>
+                  <button 
+                    className="qty-btn" 
+                    style={{ border: "none", background: "none" }} 
+                    onClick={() => setQty((q) => Math.min(product.stock, q + 1))} 
+                    disabled={!inStock || qty >= product.stock || isAddingToCart}
+                  >+</button>
                 </div>
 
                 {/* Add to cart */}
                 <button
                   className={`btn-cart${addedToCart ? " added" : ""}`}
-                  disabled={!inStock}
+                  disabled={!inStock || isAddingToCart}
                   onClick={handleAddToCart}
                 >
-                  {addedToCart ? (
+                  {isAddingToCart ? (
+                    <>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="animate-spin">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" strokeDasharray="32" />
+                        <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" fill="none" />
+                      </svg>
+                      Adding...
+                    </>
+                  ) : addedToCart ? (
                     <>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>
                       Added to Cart
@@ -501,7 +614,12 @@ export default function ProductPage() {
                 </button>
 
                 {/* Wishlist */}
-                <button className={`btn-wish${wished ? " wished" : ""}`} onClick={() => setWished((v) => !v)} aria-label="Wishlist">
+                <button 
+                  className={`btn-wish${wished ? " wished" : ""}`} 
+                  onClick={() => setWished((v) => !v)} 
+                  aria-label="Wishlist"
+                  disabled={isAddingToCart}
+                >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill={wished ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
                   </svg>

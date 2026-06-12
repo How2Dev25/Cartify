@@ -6,62 +6,37 @@ import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { supabase } from "@/app/lib/supabase";
+import { 
+  getCartWithDetails, 
+  updateCartItemQuantity, 
+  removeCartItem, 
+  clearCart,
+  applyCouponToCart,
+  removeCouponFromCart
+} from "@/app/lib/cart";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface CartItem {
-  id: number;
-  name: string;
-  category: string;
-  price: number;
-  originalPrice: number;
-  image: string;
-  size: string;
-  color: string;
-  colorHex: string;
-  qty: number;
+interface CartItemWithDetails {
+  id: string;
+  cart_id: string;
+  product_id: string;
+  quantity: number;
+  selected_size: string | null;
+  selected_color: string | null;
+  selected_color_name: string | null;
+  price_at_add: number;
+  product: {
+    id: string;
+    name: string;
+    price: number;
+    original_price: number;
+    image_url: string | null;
+    stock: number;
+    status: string;
+  };
 }
-
-// ─── Mock cart data ───────────────────────────────────────────────────────────
-
-const initialCart: CartItem[] = [
-  {
-    id: 2,
-    name: "Premium Leather Watch",
-    category: "Accessories",
-    price: 199.99,
-    originalPrice: 299.99,
-    image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop",
-    size: "One Size",
-    color: "Tan",
-    colorHex: "#92400e",
-    qty: 1,
-  },
-  {
-    id: 1,
-    name: "Classic White Sneakers",
-    category: "Footwear",
-    price: 89.99,
-    originalPrice: 129.99,
-    image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=400&fit=crop",
-    size: "41",
-    color: "White",
-    colorHex: "#f5f5f0",
-    qty: 1,
-  },
-  {
-    id: 3,
-    name: "Designer Handbag",
-    category: "Bags",
-    price: 149.99,
-    originalPrice: 249.99,
-    image: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=400&h=400&fit=crop",
-    size: "One Size",
-    color: "Berry",
-    colorHex: "#be185d",
-    qty: 1,
-  },
-];
 
 const SHIPPING_THRESHOLD = 1500;
 const SHIPPING_FEE = 120;
@@ -74,13 +49,14 @@ function CartRow({
   onRemove,
   index,
 }: {
-  item: CartItem;
-  onQty: (id: number, qty: number) => void;
-  onRemove: (id: number) => void;
+  item: CartItemWithDetails;
+  onQty: (id: string, qty: number) => Promise<void>;
+  onRemove: (id: string) => Promise<void>;
   index: number;
 }) {
-  const [removing, setRemoving] = useState(false);
+  const [updatingQty, setUpdatingQty] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
+  const displayImage = item.product.image_url || "https://placehold.co/400x400?text=No+Image";
 
   useEffect(() => {
     gsap.fromTo(rowRef.current,
@@ -89,66 +65,92 @@ function CartRow({
     );
   }, [index]);
 
-  const handleRemove = () => {
-    setRemoving(true);
+  const handleQtyChange = async (newQty: number) => {
+    if (newQty < 1) return;
+    if (newQty > item.product.stock) return;
+    
+    setUpdatingQty(true);
+    await onQty(item.id, newQty);
+    setUpdatingQty(false);
+  };
+
+  const handleRemove = async () => {
     gsap.to(rowRef.current, {
       opacity: 0,
       x: 50,
       duration: 0.3,
       ease: "power2.in",
-      onComplete: () => onRemove(item.id)
+      onComplete: async () => {
+        await onRemove(item.id);
+      }
     });
   };
+
+  const itemTotal = item.price_at_add * item.quantity;
+  const originalTotal = item.product.original_price * item.quantity;
+  const hasDiscount = item.product.original_price > item.price_at_add;
 
   return (
     <div ref={rowRef} className="cart-row">
       {/* Image */}
-      <Link href={routes.productDetail(item.id)} className="cart-img-wrap">
-        <img src={item.image} alt={item.name} className="cart-img" />
+      <Link href={routes.productDetail(item.product_id)} className="cart-img-wrap">
+        <img src={displayImage} alt={item.product.name} className="cart-img" />
       </Link>
 
       {/* Details */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", color: "#f97316", margin: "0 0 4px" }}>
-          {item.category}
+          {item.product.name.split(' ').slice(-1)[0]}
         </p>
-        <Link href={routes.productDetail(item.id)} style={{ textDecoration: "none" }}>
+        <Link href={routes.productDetail(item.product_id)} style={{ textDecoration: "none" }}>
           <h3 style={{ fontSize: 16, fontWeight: 600, color: "#111110", margin: "0 0 8px", lineHeight: 1.3, fontFamily: "'Playfair Display', serif" }}>
-            {item.name}
+            {item.product.name}
           </h3>
         </Link>
 
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          {item.size !== "One Size" && (
+          {item.selected_size && item.selected_size !== "One Size" && (
             <span style={{ fontSize: 12, color: "#6b7280", background: "#f3f4f6", padding: "3px 10px", borderRadius: 100 }}>
-              Size: EU {item.size}
+              Size: {item.selected_size}
             </span>
           )}
-          <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#6b7280" }}>
-            <span style={{ width: 12, height: 12, borderRadius: "50%", background: item.colorHex, border: "1px solid rgba(0,0,0,0.1)", display: "inline-block" }} />
-            {item.color}
-          </span>
+          {item.selected_color && (
+            <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#6b7280" }}>
+              <span style={{ width: 12, height: 12, borderRadius: "50%", background: item.selected_color, border: "1px solid rgba(0,0,0,0.1)", display: "inline-block" }} />
+              {item.selected_color_name || item.selected_color}
+            </span>
+          )}
         </div>
       </div>
 
       {/* Qty stepper */}
       <div className="qty-stepper">
-        <button className="qty-step-btn" onClick={() => onQty(item.id, Math.max(1, item.qty - 1))}>−</button>
-        <span style={{ fontSize: 14, fontWeight: 600, minWidth: 20, textAlign: "center" }}>{item.qty}</span>
-        <button className="qty-step-btn" onClick={() => onQty(item.id, item.qty + 1)}>+</button>
+        <button 
+          className="qty-step-btn" 
+          onClick={() => handleQtyChange(item.quantity - 1)}
+          disabled={updatingQty}
+        >−</button>
+        <span style={{ fontSize: 14, fontWeight: 600, minWidth: 20, textAlign: "center" }}>
+          {updatingQty ? "..." : item.quantity}
+        </span>
+        <button 
+          className="qty-step-btn" 
+          onClick={() => handleQtyChange(item.quantity + 1)}
+          disabled={updatingQty || item.quantity >= item.product.stock}
+        >+</button>
       </div>
 
       {/* Price */}
       <div style={{ textAlign: "right", minWidth: 88 }}>
         <p style={{ fontSize: 18, fontWeight: 700, color: "#f97316", margin: "0 0 4px", letterSpacing: "-0.02em" }}>
-          ₱{(item.price * item.qty).toFixed(2)}
+          ₱{itemTotal.toFixed(2)}
         </p>
-        {item.qty > 1 && (
-          <p style={{ fontSize: 12, color: "#9ca3af", margin: 0 }}>₱{item.price} each</p>
+        {item.quantity > 1 && (
+          <p style={{ fontSize: 12, color: "#9ca3af", margin: 0 }}>₱{item.price_at_add} each</p>
         )}
-        {item.originalPrice > item.price && (
+        {hasDiscount && (
           <p style={{ fontSize: 12, color: "#d1d5db", textDecoration: "line-through", margin: 0 }}>
-            ₱{(item.originalPrice * item.qty).toFixed(2)}
+            ₱{originalTotal.toFixed(2)}
           </p>
         )}
       </div>
@@ -202,73 +204,134 @@ function EmptyCart() {
 
 export default function CartPage() {
   const router = useRouter();
-  const [cart, setCart] = useState<CartItem[]>(initialCart);
-  const [coupon, setCoupon] = useState("");
+  const [cartItems, setCartItems] = useState<CartItemWithDetails[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [couponCode, setCouponCode] = useState("");
   const [couponApplied, setCouponApplied] = useState(false);
   const [couponError, setCouponError] = useState(false);
+  const [couponDiscount, setCouponDiscount] = useState(0);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   const pageRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
 
+  // Get current user and load cart
   useEffect(() => {
+    const loadUserAndCart = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      
+      setUserId(user.id);
+      await loadCart(user.id);
+    };
+    
+    loadUserAndCart();
+  }, [router]);
+
+  // Animation on mount
+  useEffect(() => {
+    if (loading) return;
+    
     gsap.registerPlugin(ScrollTrigger);
     
-    // Page entrance animation
     gsap.fromTo(pageRef.current,
       { opacity: 0 },
       { opacity: 1, duration: 0.5 }
     );
     
-    // Breadcrumb animation
     gsap.fromTo(".breadcrumb-item",
       { opacity: 0, y: -20 },
       { opacity: 1, y: 0, duration: 0.5, stagger: 0.1, ease: "power2.out" }
     );
     
-    // Title animation
     gsap.fromTo(".cart-title",
       { opacity: 0, x: -30 },
       { opacity: 1, x: 0, duration: 0.6, ease: "back.out(1)" }
     );
     
-    // Free shipping progress animation
-    gsap.fromTo(progressRef.current,
-      { opacity: 0, scaleX: 0 },
-      { opacity: 1, scaleX: 1, duration: 0.8, ease: "power2.out" }
-    );
-    
-    // Summary animation
-    gsap.fromTo(summaryRef.current,
-      { opacity: 0, x: 50 },
-      { opacity: 1, x: 0, duration: 0.8, delay: 0.3, ease: "back.out(0.8)" }
-    );
+    if (cartItems.length > 0) {
+      gsap.fromTo(progressRef.current,
+        { opacity: 0, scaleX: 0 },
+        { opacity: 1, scaleX: 1, duration: 0.8, ease: "power2.out" }
+      );
+      
+      gsap.fromTo(summaryRef.current,
+        { opacity: 0, x: 50 },
+        { opacity: 1, x: 0, duration: 0.8, delay: 0.3, ease: "back.out(0.8)" }
+      );
+    }
     
     return () => {
       ScrollTrigger.getAll().forEach(trigger => trigger.kill());
     };
-  }, []);
+  }, [loading, cartItems.length]);
 
-  const updateQty = (id: number, qty: number) =>
-    setCart((c) => c.map((item) => (item.id === id ? { ...item, qty } : item)));
+  const loadCart = async (uid: string) => {
+    setLoading(true);
+    const cartData = await getCartWithDetails(uid);
+    
+    if (cartData && cartData.items) {
+      setCartItems(cartData.items);
+      if (cartData.coupon) {
+        setCouponApplied(true);
+        setCouponDiscount(cartData.discount_amount);
+      } else {
+        setCouponApplied(false);
+        setCouponDiscount(0);
+      }
+    } else {
+      setCartItems([]);
+    }
+    setLoading(false);
+  };
 
-  const removeItem = (id: number) =>
-    setCart((c) => c.filter((item) => item.id !== id));
+  const updateQty = async (itemId: string, newQty: number) => {
+    if (!userId) return;
+    
+    await updateCartItemQuantity(userId, itemId, newQty);
+    await loadCart(userId);
+    window.dispatchEvent(new Event('cart-updated'));
+  };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const savings = cart.reduce((sum, item) => sum + (item.originalPrice - item.price) * item.qty, 0);
-  const discount = couponApplied ? subtotal * 0.1 : 0;
-  const shipping = subtotal >= SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE;
-  const total = subtotal - discount + shipping;
+  const removeItem = async (itemId: string) => {
+    if (!userId) return;
+    
+    await removeCartItem(userId, itemId);
+    await loadCart(userId);
+    window.dispatchEvent(new Event('cart-updated'));
+  };
 
-  const shippingProgressPct = Math.min(100, (subtotal / SHIPPING_THRESHOLD) * 100);
-  const amountToFreeShipping = Math.max(0, SHIPPING_THRESHOLD - subtotal);
+  const handleClearCart = async () => {
+    if (!userId) return;
+    
+    gsap.to(".cart-row", {
+      opacity: 0,
+      x: -50,
+      stagger: 0.05,
+      duration: 0.3,
+      onComplete: async () => {
+        await clearCart(userId);
+        await loadCart(userId);
+        window.dispatchEvent(new Event('cart-updated'));
+      }
+    });
+  };
 
-  const handleCoupon = () => {
-    if (coupon.trim().toUpperCase() === "SAVE10") {
+  const handleApplyCoupon = async () => {
+    if (!userId) return;
+    
+    const result = await applyCouponToCart(userId, couponCode);
+    
+    if (result.success) {
       setCouponApplied(true);
       setCouponError(false);
+      await loadCart(userId);
       gsap.to(".coupon-input", {
         scale: 1.05,
         duration: 0.2,
@@ -287,6 +350,16 @@ export default function CartPage() {
     }
   };
 
+  const handleRemoveCoupon = async () => {
+    if (!userId) return;
+    
+    await removeCouponFromCart(userId);
+    setCouponApplied(false);
+    setCouponDiscount(0);
+    setCouponCode("");
+    await loadCart(userId);
+  };
+
   const handleCheckout = () => {
     setCheckingOut(true);
     gsap.to(".checkout-btn", {
@@ -301,6 +374,36 @@ export default function CartPage() {
       }
     });
   };
+
+  // Calculate totals
+  const itemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const subtotal = cartItems.reduce((sum, item) => sum + (item.price_at_add * item.quantity), 0);
+  const savings = cartItems.reduce((sum, item) => {
+    if (item.product.original_price > item.price_at_add) {
+      return sum + ((item.product.original_price - item.price_at_add) * item.quantity);
+    }
+    return sum;
+  }, 0);
+  const discount = couponDiscount;
+  const shipping = subtotal >= SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE;
+  const total = subtotal - discount + shipping;
+
+  const shippingProgressPct = Math.min(100, (subtotal / SHIPPING_THRESHOLD) * 100);
+  const amountToFreeShipping = Math.max(0, SHIPPING_THRESHOLD - subtotal);
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#fafaf9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 48, height: 48, border: "4px solid #f3f4f6", borderTopColor: "#f97316", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 16px" }} />
+          <p style={{ color: "#9ca3af" }}>Loading your cart...</p>
+        </div>
+        <style>{`
+          @keyframes spin { to { transform: rotate(360deg); } }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -367,7 +470,8 @@ export default function CartPage() {
           font-family: 'DM Sans', sans-serif;
           padding: 0;
         }
-        .qty-step-btn:hover { color: #f97316; background: #fff3ed; }
+        .qty-step-btn:hover:not(:disabled) { color: #f97316; background: #fff3ed; }
+        .qty-step-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
         /* Remove */
         .remove-btn {
@@ -399,7 +503,6 @@ export default function CartPage() {
         }
         .coupon-input:focus { border-color: #f97316; }
         .coupon-input.error { border-color: #f87171; }
-        .coupon-input.success { border-color: #4ade80; }
         .coupon-btn {
           background: #111110;
           color: #fff;
@@ -412,7 +515,8 @@ export default function CartPage() {
           transition: background 0.2s;
           white-space: nowrap;
         }
-        .coupon-btn:hover { background: #f97316; }
+        .coupon-btn:hover:not(:disabled) { background: #f97316; }
+        .coupon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
         /* Summary rows */
         .summary-row {
@@ -441,7 +545,7 @@ export default function CartPage() {
           box-shadow: 0 4px 20px rgba(249,115,22,0.35);
           transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
         }
-        .checkout-btn:hover { background: #ea6d10; transform: translateY(-1px); box-shadow: 0 6px 28px rgba(249,115,22,0.45); }
+        .checkout-btn:hover:not(:disabled) { background: #ea6d10; transform: translateY(-1px); box-shadow: 0 6px 28px rgba(249,115,22,0.45); }
         .checkout-btn:disabled { background: #d1d5db; box-shadow: none; cursor: not-allowed; transform: none; }
 
         .btn-primary-link {
@@ -473,6 +577,18 @@ export default function CartPage() {
           font-size: 12px; color: #6b7280; font-weight: 400;
         }
 
+        /* Remove coupon link */
+        .remove-coupon {
+          background: none;
+          border: none;
+          color: #ef4444;
+          font-size: 11px;
+          cursor: pointer;
+          margin-left: 8px;
+          text-decoration: underline;
+        }
+        .remove-coupon:hover { color: #dc2626; }
+
         /* Responsive */
         @media (max-width: 900px) {
           .cart-layout { flex-direction: column !important; }
@@ -501,12 +617,12 @@ export default function CartPage() {
             <h1 className="cart-title" style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(28px,4vw,40px)", fontWeight: 600, margin: 0, letterSpacing: "-0.02em" }}>
               Shopping Cart
             </h1>
-            {cart.length > 0 && (
-              <span style={{ fontSize: 14, color: "#9ca3af", fontWeight: 300 }}>{cart.length} item{cart.length !== 1 ? "s" : ""}</span>
+            {cartItems.length > 0 && (
+              <span style={{ fontSize: 14, color: "#9ca3af", fontWeight: 300 }}>{itemCount} item{itemCount !== 1 ? "s" : ""}</span>
             )}
           </div>
 
-          {cart.length === 0 ? (
+          {cartItems.length === 0 ? (
             <EmptyCart />
           ) : (
             <div className="cart-layout" style={{ display: "flex", gap: 32, alignItems: "flex-start" }}>
@@ -535,7 +651,7 @@ export default function CartPage() {
 
                 {/* Items card */}
                 <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #f0f0ee", padding: "4px 24px 8px" }}>
-                  {cart.map((item, index) => (
+                  {cartItems.map((item, index) => (
                     <CartRow key={item.id} item={item} onQty={updateQty} onRemove={removeItem} index={index} />
                   ))}
                 </div>
@@ -549,15 +665,7 @@ export default function CartPage() {
                     Continue Shopping
                   </Link>
                   <button
-                    onClick={() => {
-                      gsap.to(".cart-row", {
-                        opacity: 0,
-                        x: -50,
-                        stagger: 0.05,
-                        duration: 0.3,
-                        onComplete: () => setCart([])
-                      });
-                    }}
+                    onClick={handleClearCart}
                     style={{ fontSize: 13, color: "#9ca3af", background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "color 0.2s" }}
                     onMouseEnter={e => (e.currentTarget.style.color = "#ef4444")}
                     onMouseLeave={e => (e.currentTarget.style.color = "#9ca3af")}>
@@ -572,21 +680,26 @@ export default function CartPage() {
                 {/* Coupon */}
                 <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #f0f0ee", padding: "20px 22px", marginBottom: 16 }}>
                   <p style={{ fontSize: 13, fontWeight: 600, color: "#111110", margin: "0 0 12px" }}>Have a promo code?</p>
-                  <div style={{ display: "flex" }}>
-                    <input
-                      type="text"
-                      placeholder="e.g. SAVE10"
-                      value={coupon}
-                      onChange={e => { setCoupon(e.target.value); setCouponError(false); }}
-                      className={`coupon-input${couponError ? " error" : couponApplied ? " success" : ""}`}
-                      disabled={couponApplied}
-                    />
-                    <button className="coupon-btn" onClick={handleCoupon} disabled={couponApplied}>
-                      {couponApplied ? "Applied ✓" : "Apply"}
-                    </button>
-                  </div>
-                  {couponError && <p style={{ fontSize: 12, color: "#ef4444", margin: "6px 0 0" }}>Invalid code. Try SAVE10</p>}
-                  {couponApplied && <p style={{ fontSize: 12, color: "#16a34a", margin: "6px 0 0" }}>10% discount applied!</p>}
+                  {couponApplied ? (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f0fdf4", padding: "10px 14px", borderRadius: 10 }}>
+                      <span style={{ fontSize: 13, color: "#16a34a", fontWeight: 500 }}>✓ Coupon applied!</span>
+                      <button onClick={handleRemoveCoupon} className="remove-coupon">Remove</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex" }}>
+                      <input
+                        type="text"
+                        placeholder="Enter coupon code"
+                        value={couponCode}
+                        onChange={e => { setCouponCode(e.target.value); setCouponError(false); }}
+                        className={`coupon-input${couponError ? " error" : ""}`}
+                      />
+                      <button className="coupon-btn" onClick={handleApplyCoupon}>
+                        Apply
+                      </button>
+                    </div>
+                  )}
+                  {couponError && <p style={{ fontSize: 12, color: "#ef4444", margin: "6px 0 0" }}>Invalid coupon code</p>}
                 </div>
 
                 {/* Order summary */}
@@ -594,7 +707,7 @@ export default function CartPage() {
                   <h2 style={{ fontSize: 16, fontWeight: 600, color: "#111110", margin: "0 0 18px", letterSpacing: "-0.01em" }}>Order Summary</h2>
 
                   <div className="summary-row">
-                    <span>Subtotal ({cart.reduce((s, i) => s + i.qty, 0)} items)</span>
+                    <span>Subtotal ({itemCount} items)</span>
                     <span style={{ color: "#111110", fontWeight: 500 }}>₱{subtotal.toFixed(2)}</span>
                   </div>
                   {savings > 0 && (
@@ -603,9 +716,9 @@ export default function CartPage() {
                       <span style={{ color: "#16a34a", fontWeight: 600 }}>-₱{savings.toFixed(2)}</span>
                     </div>
                   )}
-                  {couponApplied && (
+                  {couponApplied && discount > 0 && (
                     <div className="summary-row">
-                      <span style={{ color: "#f97316" }}>Promo (SAVE10)</span>
+                      <span style={{ color: "#f97316" }}>Coupon discount</span>
                       <span style={{ color: "#f97316", fontWeight: 600 }}>-₱{discount.toFixed(2)}</span>
                     </div>
                   )}
@@ -624,7 +737,7 @@ export default function CartPage() {
                     <span style={{ fontSize: 16, fontWeight: 600, color: "#111110" }}>Total</span>
                     <div style={{ textAlign: "right" }}>
                       <span style={{ fontSize: 24, fontWeight: 700, color: "#f97316", letterSpacing: "-0.02em" }}>
-                        ₱{(total).toFixed(2)}
+                        ₱{total.toFixed(2)}
                       </span>
                       <p style={{ fontSize: 11, color: "#9ca3af", margin: "2px 0 0" }}>VAT included where applicable</p>
                     </div>
@@ -634,7 +747,7 @@ export default function CartPage() {
                   <button
                     className="checkout-btn"
                     onClick={handleCheckout}
-                    disabled={checkingOut}
+                    disabled={checkingOut || cartItems.length === 0}
                   >
                     {checkingOut ? (
                       <>
