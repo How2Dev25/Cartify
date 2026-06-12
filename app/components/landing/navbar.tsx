@@ -21,6 +21,7 @@ export function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
+  const [ordersCount, setOrdersCount] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -40,17 +41,28 @@ export function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Load user and cart count
+  // Load user, cart count, and orders count
   useEffect(() => {
     const loadUser = async () => {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
       setAvatarUrl(currentUser?.profile?.avatar_url || null);
       
-      // Load cart count if user is logged in
       if (currentUser) {
-        const count = await getCartItemCount(currentUser.id);
-        setCartCount(count);
+        // Load cart count
+        const cartCountVal = await getCartItemCount(currentUser.id);
+        setCartCount(cartCountVal);
+        
+        // Load orders count
+        const { data: orders, error } = await supabase
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", currentUser.id)
+          .eq("status", "paid");
+        
+        if (!error) {
+          setOrdersCount(orders?.length || 0);
+        }
       }
     };
 
@@ -61,12 +73,20 @@ export function Navbar() {
       setUser(currentUser);
       setAvatarUrl(currentUser?.profile?.avatar_url || null);
       
-      // Reload cart count on auth change
       if (currentUser) {
-        const count = await getCartItemCount(currentUser.id);
-        setCartCount(count);
+        const cartCountVal = await getCartItemCount(currentUser.id);
+        setCartCount(cartCountVal);
+        
+        const { data: orders } = await supabase
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", currentUser.id)
+          .eq("status", "paid");
+        
+        setOrdersCount(orders?.length || 0);
       } else {
         setCartCount(0);
+        setOrdersCount(0);
       }
     });
 
@@ -81,9 +101,26 @@ export function Navbar() {
     };
     window.addEventListener('cart-updated', handleCartUpdate);
 
+    // Listen for order updates (when new order is placed)
+    const handleOrderUpdate = () => {
+      if (user) {
+        const fetchOrdersCount = async () => {
+          const { data: orders } = await supabase
+            .from("orders")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", user.id)
+            .eq("status", "paid");
+          setOrdersCount(orders?.length || 0);
+        };
+        fetchOrdersCount();
+      }
+    };
+    window.addEventListener('order-updated', handleOrderUpdate);
+
     return () => {
       try { window.removeEventListener('user-profile-updated', onProfileUpdated); } catch (e) {}
       try { window.removeEventListener('cart-updated', handleCartUpdate); } catch (e) {}
+      try { window.removeEventListener('order-updated', handleOrderUpdate); } catch (e) {}
       try {
         // @ts-ignore
         authListener?.subscription?.unsubscribe?.();
@@ -97,6 +134,7 @@ export function Navbar() {
     await signOut();
     setUser(null);
     setCartCount(0);
+    setOrdersCount(0);
     setDropdownOpen(false);
     router.push("/");
   };
@@ -117,16 +155,26 @@ export function Navbar() {
     return [firstName, lastName].filter(Boolean).join(" ") || "My Account";
   };
 
-  // Refresh cart count when navigating back to page
+  // Refresh counts when navigating back to page
   useEffect(() => {
-    const refreshCartCount = () => {
+    const refreshCounts = () => {
       if (user) {
         getCartItemCount(user.id).then(setCartCount);
+        
+        const fetchOrdersCount = async () => {
+          const { data: orders } = await supabase
+            .from("orders")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", user.id)
+            .eq("status", "paid");
+          setOrdersCount(orders?.length || 0);
+        };
+        fetchOrdersCount();
       }
     };
     
-    window.addEventListener('focus', refreshCartCount);
-    return () => window.removeEventListener('focus', refreshCartCount);
+    window.addEventListener('focus', refreshCounts);
+    return () => window.removeEventListener('focus', refreshCounts);
   }, [user]);
 
   return (
@@ -710,7 +758,7 @@ export function Navbar() {
 
             {user && (
               <>
-                {/* Orders */}
+                {/* Orders with badge */}
                 <Link href={routes.orders} className="nav-icon-btn" aria-label="Orders" title="Orders">
                   <svg viewBox="0 0 24 24">
                     <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
@@ -718,6 +766,9 @@ export function Navbar() {
                     <line x1="9" y1="12" x2="15" y2="12"/>
                     <line x1="9" y1="16" x2="13" y2="16"/>
                   </svg>
+                  {ordersCount > 0 && (
+                    <span className="badge">{ordersCount > 99 ? '99+' : ordersCount}</span>
+                  )}
                 </Link>
 
                 {/* Cart with badge */}
@@ -769,7 +820,9 @@ export function Navbar() {
                     <div className="dropdown-user-info">
                       <div className="dropdown-fullname">{getDisplayName()}</div>
                       <div className="dropdown-email">{user?.email}</div>
-                      <div className="dropdown-badge">Active member</div>
+                      <div className="dropdown-badge">
+                        {ordersCount > 0 ? `${ordersCount} Order${ordersCount !== 1 ? "s" : ""}` : "Active member"}
+                      </div>
                     </div>
                   </div>
 
@@ -785,7 +838,7 @@ export function Navbar() {
                       <span className="dropdown-item-icon">
                         <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
                       </span>
-                      My Orders
+                      My Orders {ordersCount > 0 && `(${ordersCount})`}
                     </Link>
 
                     <Link href="/cart" className="dropdown-item" onClick={() => setDropdownOpen(false)} role="menuitem">
@@ -845,6 +898,9 @@ export function Navbar() {
               <div>
                 <div className="mobile-user-name">{getDisplayName()}</div>
                 <div className="mobile-user-email">{user?.email}</div>
+                <div className="text-xs text-orange-600 mt-1">
+                  {ordersCount} order{ordersCount !== 1 ? "s" : ""}
+                </div>
               </div>
             </div>
           </>
@@ -869,7 +925,7 @@ export function Navbar() {
               </Link>
               <Link href={routes.orders} className="mobile-action-btn" onClick={() => setMobileOpen(false)}>
                 <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
-                My Orders
+                My Orders {ordersCount > 0 && `(${ordersCount})`}
               </Link>
               <Link href="/cart" className="mobile-action-btn" onClick={() => setMobileOpen(false)}>
                 <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>

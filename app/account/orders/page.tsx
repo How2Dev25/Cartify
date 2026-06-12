@@ -4,164 +4,446 @@ import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { supabase } from "@/app/lib/supabase";
 
-export default function OrdersPage() {
-  const [selectedOrder, setSelectedOrder] = useState(0);
-  const [activeStep, setActiveStep] = useState(2); // 0=processing, 1=shipped, 2=in_transit, 3=out_for_delivery, 4=delivered
-  
-  // Refs for animations
-  const heroRef = useRef<HTMLDivElement>(null);
-  const ordersRef = useRef<HTMLDivElement>(null);
-  const trackingRef = useRef<HTMLDivElement>(null);
+interface Order {
+  id: string;
+  order_number: string;
+  created_at: string;
+  status: string;
+  subtotal: number;
+  shipping_cost: number;
+  total: number;
+  shipping_method: string;
+  shipping_address: string;
+  customer_name: string;
+  customer_email: string;
+  customer_phone: string;
+  notes: string | null;
+  payment_intent_id: string | null;
+  paid_at: string | null;
+  updated_at: string;
+}
+
+interface OrderItem {
+  id: string;
+  order_id: string;
+  product_id: string;
+  quantity: number;
+  price: number;
+  selected_size: string | null;
+  selected_color: string | null;
+  product: {
+    id: string;
+    name: string;
+    image_url: string | null;
+  };
+}
+
+function EmptyOrders() {
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    gsap.registerPlugin(ScrollTrigger);
-    
-    // Hero animations
-    const heroTl = gsap.timeline();
-    heroTl
-      .fromTo(".hero-badge", 
-        { opacity: 0, y: -30 },
-        { opacity: 1, y: 0, duration: 0.8, ease: "back.out(1.2)" }
-      )
-      .fromTo(".hero-title", 
-        { opacity: 0, scale: 0.8 },
-        { opacity: 1, scale: 1, duration: 1, ease: "elastic.out(1, 0.5)" },
-        "-=0.4"
-      );
-    
-    // Orders section animation
-    gsap.fromTo(".orders-container",
-      { opacity: 0, y: 50 },
-      {
-        opacity: 1,
-        y: 0,
-        duration: 0.8,
-        scrollTrigger: {
-          trigger: ordersRef.current,
-          start: "top 80%",
-          toggleActions: "play none none reverse",
-        },
-      }
+    gsap.fromTo(containerRef.current,
+      { opacity: 0, scale: 0.9, y: 30 },
+      { opacity: 1, scale: 1, y: 0, duration: 0.8, ease: "back.out(1.2)" }
     );
-    
-    // Tracking section animation
-    gsap.fromTo(".tracking-container",
-      { opacity: 0, x: 30 },
-      {
-        opacity: 1,
-        x: 0,
-        duration: 0.8,
-        scrollTrigger: {
-          trigger: trackingRef.current,
-          start: "top 80%",
-          toggleActions: "play none none reverse",
-        },
-      }
-    );
-    
-    return () => {
-      ScrollTrigger.getAll().forEach(trigger => trigger.kill());
-    };
   }, []);
 
-  // Sample orders data
-  const orders = [
-    {
-      id: "ORD-2024-001",
-      date: "December 15, 2024",
-      status: "In Transit",
-      statusCode: 2,
-      total: 189.97,
-      items: 3,
-      paymentMethod: "Credit Card",
-      shippingAddress: "123 Customer St, Quezon City, Metro Manila, Philippines",
-      estimatedDelivery: "December 20, 2024",
-      trackingNumber: "TRK-888-1234-5678",
-      carrier: "Flash Express",
-      itemsList: [
-        { name: "Classic White Sneakers", quantity: 1, price: 89.99, image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=100&h=100&fit=crop" },
-        { name: "Premium Leather Watch", quantity: 1, price: 199.99, image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100&h=100&fit=crop" }
-      ]
-    },
-    {
-      id: "ORD-2024-002",
-      date: "December 10, 2024",
-      status: "Delivered",
-      statusCode: 4,
-      total: 149.98,
-      items: 2,
-      paymentMethod: "GCash",
-      shippingAddress: "456 Customer Ave, Quezon City, Metro Manila, Philippines",
-      estimatedDelivery: "December 14, 2024",
-      trackingNumber: "TRK-888-5678-9012",
-      carrier: "J&T Express",
-      itemsList: [
-        { name: "Wireless Headphones", quantity: 1, price: 79.99, image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=100&h=100&fit=crop" },
-        { name: "Designer Handbag", quantity: 1, price: 149.99, image: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=100&h=100&fit=crop" }
-      ]
-    },
-    {
-      id: "ORD-2024-003",
-      date: "December 5, 2024",
-      status: "Processing",
-      statusCode: 0,
-      total: 79.99,
-      items: 1,
-      paymentMethod: "PayPal",
-      shippingAddress: "789 Customer Rd, Quezon City, Metro Manila, Philippines",
-      estimatedDelivery: "December 18, 2024",
-      trackingNumber: "Pending",
-      carrier: "Pending",
-      itemsList: [
-        { name: "Running Shoes", quantity: 1, price: 79.99, image: "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=100&h=100&fit=crop" }
-      ]
-    }
-  ];
+  return (
+    <div ref={containerRef} className="text-center py-20">
+      <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-orange-50 mb-6">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <path d="M16 10a4 4 0 01-8 0" />
+        </svg>
+      </div>
+      <h2 className="text-2xl font-bold text-gray-800 mb-3">No Orders Yet</h2>
+      <p className="text-gray-500 mb-8 max-w-md mx-auto">
+        Looks like you haven't placed any orders yet. Start shopping to see your orders here.
+      </p>
+      <Link 
+        href="/products" 
+        className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-full font-semibold transition-all duration-200 shadow-md hover:shadow-lg"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <path d="M5 12h14M12 5l7 7-7 7" />
+        </svg>
+        Start Shopping
+      </Link>
+    </div>
+  );
+}
 
-  const currentOrder = orders[selectedOrder];
+export default function OrdersPage() {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState(0);
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [allOrderItems, setAllOrderItems] = useState<Map<string, OrderItem[]>>(new Map());
+  const [loading, setLoading] = useState(true);
+  const [activeStep, setActiveStep] = useState(0);
+  const [cancellingOrder, setCancellingOrder] = useState<string | null>(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
   
-  // Tracking steps
-  const steps = [
-    { label: "Order Placed", icon: "📦", description: "Order confirmed and payment verified", date: currentOrder.date },
-    { label: "Processing", icon: "⚙️", description: "Preparing your items for shipping", date: currentOrder.date },
-    { label: "Shipped", icon: "🚚", description: "Package left our warehouse", date: "December 17, 2024" },
-    { label: "In Transit", icon: "🔄", description: "Package is on its way", date: "December 18, 2024" },
-    { label: "Out for Delivery", icon: "🚛", description: "Driver is on the way", date: "December 19, 2024" },
-    { label: "Delivered", icon: "✅", description: "Package delivered to your address", date: currentOrder.estimatedDelivery }
-  ];
+  const heroRef = useRef<HTMLDivElement>(null);
+  const heroBadgeRef = useRef<HTMLDivElement>(null);
+  const heroTitleRef = useRef<HTMLHeadingElement>(null);
+  const ordersRef = useRef<HTMLDivElement>(null);
+  const ordersContainerRef = useRef<HTMLDivElement>(null);
+  const trackingRef = useRef<HTMLDivElement>(null);
+  const trackingContainerRef = useRef<HTMLDivElement>(null);
 
-  // Parcel location tracking
-  const trackingLocations = [
-    { location: "Cartify Warehouse, Quezon City", status: "Picked Up", time: "Dec 16, 2024 - 2:30 PM", completed: true },
-    { location: "Quezon City Sorting Center", status: "Processed", time: "Dec 16, 2024 - 6:45 PM", completed: true },
-    { location: "North Manila Hub", status: "In Transit", time: "Dec 17, 2024 - 9:20 AM", completed: true },
-    { location: "Local Delivery Hub, Fairview", status: "Arrived", time: "Dec 18, 2024 - 11:15 AM", completed: activeStep >= 3 },
-    { location: "Out for Delivery", status: "With Courier", time: "Dec 19, 2024 - 8:00 AM", completed: activeStep >= 4 },
-    { location: "Your Address", status: "Delivered", time: currentOrder.estimatedDelivery, completed: activeStep >= 4 }
-  ];
+  // Fetch orders from database
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
-  const getStatusColor = (statusCode: number) => {
-    switch(statusCode) {
-      case 0: return "text-yellow-600 bg-yellow-50";
-      case 1: return "text-blue-600 bg-blue-50";
-      case 2: return "text-orange-600 bg-orange-50";
-      case 3: return "text-purple-600 bg-purple-50";
-      case 4: return "text-green-600 bg-green-50";
+      const { data: ordersData, error } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      
+      setOrders(ordersData || []);
+      
+      // Fetch items for all orders
+      if (ordersData && ordersData.length > 0) {
+        const itemsMap = new Map<string, OrderItem[]>();
+        
+        for (const order of ordersData) {
+          const { data: items, error: itemsError } = await supabase
+            .from("order_items")
+            .select(`
+              *,
+              product:product_id (
+                id,
+                name,
+                image_url
+              )
+            `)
+            .eq("order_id", order.id);
+          
+          if (!itemsError && items) {
+            itemsMap.set(order.id, items);
+          }
+        }
+        
+        setAllOrderItems(itemsMap);
+        
+        if (ordersData.length > 0) {
+          setSelectedOrder(0);
+          setActiveStep(getStatusStep(ordersData[0].status));
+          const firstOrderItems = itemsMap.get(ordersData[0].id) || [];
+          setOrderItems(firstOrderItems);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching orders:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchOrderItems = async (orderId: string) => {
+    try {
+      // Check if we already have items for this order
+      if (allOrderItems.has(orderId)) {
+        setOrderItems(allOrderItems.get(orderId) || []);
+        return;
+      }
+      
+      const { data, error } = await supabase
+        .from("order_items")
+        .select(`
+          *,
+          product:product_id (
+            id,
+            name,
+            image_url
+          )
+        `)
+        .eq("order_id", orderId);
+
+      if (error) throw error;
+      setOrderItems(data || []);
+      
+      // Store in map
+      if (data) {
+        allOrderItems.set(orderId, data);
+      }
+    } catch (error) {
+      console.error("Error fetching order items:", error);
+      setOrderItems([]);
+    }
+  };
+
+  const canCancelOrder = (status: string): boolean => {
+    const cancellableStatuses = ["pending", "processing", "paid"];
+    return cancellableStatuses.includes(status?.toLowerCase());
+  };
+
+  const getCancelButtonText = (status: string): string => {
+    const statusLower = status?.toLowerCase();
+    if (statusLower === "pending") return "Cancel Order";
+    if (statusLower === "processing") return "Cancel & Refund";
+    if (statusLower === "paid") return "Cancel & Refund";
+    return "Cannot Cancel";
+  };
+
+  const createRefund = async (paymentIntentId: string, amount: number): Promise<boolean> => {
+    try {
+      const response = await fetch("/api/create-refund", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paymentIntentId,
+          amount: Math.round(amount * 100),
+        }),
+      });
+
+      const data = await response.json();
+      return data.success === true;
+    } catch (error) {
+      console.error("Refund error:", error);
+      return false;
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!currentOrder) return;
+    
+    setCancellingOrder(currentOrder.id);
+    
+    try {
+      let refundSuccess = true;
+      
+      if (currentOrder.payment_intent_id && 
+          (currentOrder.status === "paid" || currentOrder.status === "processing")) {
+        refundSuccess = await createRefund(currentOrder.payment_intent_id, currentOrder.total);
+        
+        if (!refundSuccess) {
+          throw new Error("Refund failed. Please contact support.");
+        }
+      }
+      
+      const { error: updateError } = await supabase
+        .from("orders")
+        .update({
+          status: "cancelled",
+          notes: cancelReason ? `Cancelled: ${cancelReason}` : "Cancelled by customer",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", currentOrder.id);
+
+      if (updateError) throw updateError;
+
+      // Restore product stock
+      for (const item of currentItems) {
+        const { data: product } = await supabase
+          .from("products")
+          .select("stock")
+          .eq("id", item.product_id)
+          .single();
+        
+        if (product) {
+          await supabase
+            .from("products")
+            .update({ stock: product.stock + item.quantity })
+            .eq("id", item.product_id);
+        }
+      }
+
+      await fetchOrders();
+      setShowCancelModal(false);
+      setCancelReason("");
+      
+      alert(refundSuccess ? "Order cancelled and refund processed successfully" : "Order cancelled successfully");
+      
+    } catch (error: any) {
+      console.error("Error cancelling order:", error);
+      alert(error.message || "Failed to cancel order. Please try again or contact support.");
+    } finally {
+      setCancellingOrder(null);
+    }
+  };
+
+  const getStatusStep = (status: string): number => {
+    const statusLower = status?.toLowerCase();
+    switch (statusLower) {
+      case "pending": return 0;
+      case "processing": return 1;
+      case "shipped": return 2;
+      case "in transit": return 3;
+      case "out for delivery": return 4;
+      case "delivered": return 5;
+      case "cancelled": return -1;
+      case "paid": return 1;
+      default: return 0;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    const statusLower = status?.toLowerCase();
+    switch (statusLower) {
+      case "pending": return "text-yellow-600 bg-yellow-50";
+      case "processing": return "text-blue-600 bg-blue-50";
+      case "shipped": return "text-purple-600 bg-purple-50";
+      case "in transit": return "text-orange-600 bg-orange-50";
+      case "out for delivery": return "text-orange-600 bg-orange-50";
+      case "delivered": return "text-green-600 bg-green-50";
+      case "cancelled": return "text-red-600 bg-red-50";
+      case "paid": return "text-blue-600 bg-blue-50";
       default: return "text-gray-600 bg-gray-50";
     }
   };
 
-  const getStatusText = (statusCode: number) => {
-    switch(statusCode) {
-      case 0: return "Processing";
-      case 1: return "Shipped";
-      case 2: return "In Transit";
-      case 3: return "Out for Delivery";
-      case 4: return "Delivered";
-      default: return "Unknown";
+  const getStatusText = (status: string) => {
+    const statusLower = status?.toLowerCase();
+    switch (statusLower) {
+      case "pending": return "Pending";
+      case "processing": return "Processing";
+      case "shipped": return "Shipped";
+      case "in transit": return "In Transit";
+      case "out for delivery": return "Out for Delivery";
+      case "delivered": return "Delivered";
+      case "cancelled": return "Cancelled";
+      case "paid": return "Processing";
+      default: return status || "Unknown";
     }
   };
+
+  const getProgressPercentage = (step: number): number => {
+    if (step === -1) return 0;
+    return (step / 5) * 100;
+  };
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  };
+
+  const formatCurrency = (amount: number) => {
+    return `₱${amount.toFixed(2)}`;
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  useEffect(() => {
+    if (orders.length > 0 && selectedOrder < orders.length) {
+      fetchOrderItems(orders[selectedOrder].id);
+      setActiveStep(getStatusStep(orders[selectedOrder].status));
+    }
+  }, [selectedOrder, orders]);
+
+  // Run animations AFTER orders are loaded and DOM is ready
+  useEffect(() => {
+    if (loading) return;
+    
+    const timer = setTimeout(() => {
+      gsap.registerPlugin(ScrollTrigger);
+      
+      if (heroBadgeRef.current) {
+        gsap.fromTo(heroBadgeRef.current,
+          { opacity: 0, y: -30 },
+          { opacity: 1, y: 0, duration: 0.8, ease: "back.out(1.2)" }
+        );
+      }
+      
+      if (heroTitleRef.current) {
+        gsap.fromTo(heroTitleRef.current,
+          { opacity: 0, scale: 0.8 },
+          { opacity: 1, scale: 1, duration: 1, ease: "elastic.out(1, 0.5)" }
+        );
+      }
+      
+      if (ordersContainerRef.current && orders.length > 0) {
+        gsap.fromTo(ordersContainerRef.current,
+          { opacity: 0, y: 50 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.8,
+            scrollTrigger: {
+              trigger: ordersRef.current,
+              start: "top 80%",
+              toggleActions: "play none none reverse",
+            },
+          }
+        );
+      }
+      
+      if (trackingContainerRef.current && orders.length > 0) {
+        gsap.fromTo(trackingContainerRef.current,
+          { opacity: 0, x: 30 },
+          {
+            opacity: 1,
+            x: 0,
+            duration: 0.8,
+            scrollTrigger: {
+              trigger: trackingRef.current,
+              start: "top 80%",
+              toggleActions: "play none none reverse",
+            },
+          }
+        );
+      }
+    }, 100);
+    
+    return () => {
+      clearTimeout(timer);
+      ScrollTrigger.getAll().forEach(trigger => trigger.kill());
+    };
+  }, [loading, orders.length]);
+
+  const currentOrder = orders[selectedOrder];
+  const currentItems = orderItems;
+  const isCancellable = currentOrder ? canCancelOrder(currentOrder.status) : false;
+
+  const steps = [
+    { label: "Order Placed", icon: "📦" },
+    { label: "Processing", icon: "⚙️" },
+    { label: "Shipped", icon: "🚚" },
+    { label: "In Transit", icon: "🔄" },
+    { label: "Out for Delivery", icon: "🚛" },
+    { label: "Delivered", icon: "✅" },
+  ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading your orders...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 py-16">
+          <EmptyOrders />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -174,9 +456,6 @@ export default function OrdersPage() {
           0%, 100% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.2); opacity: 0.7; }
         }
-        .tracking-pulse {
-          animation: pulse 2s ease-in-out infinite;
-        }
       `}</style>
 
       {/* Hero Section */}
@@ -188,13 +467,13 @@ export default function OrdersPage() {
         
         <div className="container mx-auto px-4 py-20 md:py-28 relative z-10">
           <div className="max-w-4xl mx-auto text-center">
-            <div className="hero-badge opacity-0">
+            <div ref={heroBadgeRef} className="opacity-0">
               <span className="inline-block bg-orange-500/20 backdrop-blur-sm px-4 py-2 rounded-full text-orange-400 text-sm font-semibold mb-6">
                 Track Your Orders
               </span>
             </div>
             
-            <h1 className="hero-title opacity-0 text-5xl md:text-6xl lg:text-7xl font-bold mb-6">
+            <h1 ref={heroTitleRef} className="opacity-0 text-5xl md:text-6xl lg:text-7xl font-bold mb-6">
               My <span className="text-orange-500">Orders</span>
             </h1>
           </div>
@@ -210,222 +489,353 @@ export default function OrdersPage() {
       {/* Orders List Section */}
       <div ref={ordersRef} className="py-16 bg-gray-50">
         <div className="container mx-auto px-4">
-          <div className="orders-container opacity-0">
+          <div ref={ordersContainerRef} className="opacity-0">
             <h2 className="text-2xl font-bold text-gray-800 mb-6">Recent Orders</h2>
             
-            <div className="grid md:grid-cols-3 gap-4 mb-12">
-              {orders.map((order, index) => (
-                <button
-                  key={order.id}
-                  onClick={() => {
-                    setSelectedOrder(index);
-                    setActiveStep(order.statusCode);
-                  }}
-                  className={`text-left p-4 rounded-xl transition-all duration-300 ${
-                    selectedOrder === index
-                      ? "bg-orange-500 text-white shadow-lg transform scale-105"
-                      : "bg-white hover:shadow-md text-gray-700"
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <p className={`font-semibold ${selectedOrder === index ? "text-white" : "text-gray-800"}`}>
-                        {order.id}
-                      </p>
-                      <p className={`text-sm ${selectedOrder === index ? "text-orange-100" : "text-gray-500"}`}>
-                        {order.date}
-                      </p>
+            <div className="space-y-4">
+              {orders.map((order, index) => {
+                const orderItemList = allOrderItems.get(order.id) || [];
+                const itemCount = orderItemList.reduce((sum, item) => sum + item.quantity, 0);
+                const isSelected = selectedOrder === index;
+                
+                return (
+                  <div
+                    key={order.id}
+                    onClick={() => {
+                      setSelectedOrder(index);
+                      setActiveStep(getStatusStep(order.status));
+                      const items = allOrderItems.get(order.id) || [];
+                      setOrderItems(items);
+                    }}
+                    className={`bg-white rounded-xl shadow-sm overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-md ${
+                      isSelected ? "ring-2 ring-orange-500" : ""
+                    }`}
+                  >
+                    {/* Order Header */}
+                    <div className="p-5 border-b border-gray-100">
+                      <div className="flex flex-wrap justify-between items-start gap-3">
+                        <div>
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="text-sm font-mono text-gray-500">#{order.order_number}</span>
+                            <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(order.status)}`}>
+                              {getStatusText(order.status)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-400">{formatDate(order.created_at)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xl font-bold text-orange-600">{formatCurrency(order.total)}</p>
+                          <p className="text-xs text-gray-500">{itemCount} item{itemCount !== 1 ? "s" : ""}</p>
+                        </div>
+                      </div>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${selectedOrder === index ? "bg-white text-orange-600" : getStatusColor(order.statusCode)}`}>
-                      {order.status}
-                    </span>
+                    
+                    {/* Order Items - Product List */}
+                    <div className="p-5">
+                      <div className="space-y-3">
+                        {orderItemList.slice(0, 3).map((item) => (
+                          <div key={item.id} className="flex items-center gap-3">
+                            <img 
+                              src={item.product?.image_url || "https://placehold.co/50x50?text=No+Image"} 
+                              alt={item.product?.name || "Product"}
+                              className="w-12 h-12 rounded-lg object-cover bg-gray-100"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-800 truncate">{item.product?.name || "Product"}</p>
+                              <div className="flex flex-wrap gap-2 text-xs text-gray-500 mt-1">
+                                {item.selected_size && item.selected_size !== "One Size" && (
+                                  <span>Size: {item.selected_size}</span>
+                                )}
+                                {item.selected_color && (
+                                  <span>Color: {item.selected_color}</span>
+                                )}
+                                <span>Qty: {item.quantity}</span>
+                              </div>
+                            </div>
+                            <p className="text-sm font-semibold text-gray-800">{formatCurrency(item.price * item.quantity)}</p>
+                          </div>
+                        ))}
+                        
+                        {orderItemList.length > 3 && (
+                          <p className="text-xs text-orange-500 text-center pt-2">
+                            + {orderItemList.length - 3} more item{orderItemList.length - 3 !== 1 ? "s" : ""}
+                          </p>
+                        )}
+                        
+                        {orderItemList.length === 0 && (
+                          <p className="text-sm text-gray-400 text-center py-2">No items found</p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Order Footer */}
+                    <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="flex -space-x-1">
+                          {orderItemList.slice(0, 3).map((item, idx) => (
+                            <img 
+                              key={idx}
+                              src={item.product?.image_url || "https://placehold.co/30x30?text=No+Image"} 
+                              alt=""
+                              className="w-6 h-6 rounded-full border-2 border-white object-cover bg-gray-100"
+                            />
+                          ))}
+                          {orderItemList.length > 3 && (
+                            <div className="w-6 h-6 rounded-full bg-gray-200 border-2 border-white flex items-center justify-center text-xs font-medium text-gray-600">
+                              +{orderItemList.length - 3}
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {itemCount} item{itemCount !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                      <button 
+                        className={`text-xs font-medium transition ${
+                          isSelected 
+                            ? "text-orange-600" 
+                            : "text-gray-400 hover:text-orange-600"
+                        }`}
+                      >
+                        {isSelected ? "Viewing Details →" : "Click to View Details →"}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center mt-2">
-                    <p className={`text-sm font-semibold ${selectedOrder === index ? "text-white" : "text-orange-600"}`}>
-                      ₱{order.total.toFixed(2)}
-                    </p>
-                    <p className={`text-xs ${selectedOrder === index ? "text-orange-100" : "text-gray-500"}`}>
-                      {order.items} items
-                    </p>
-                  </div>
-                </button>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
 
       {/* Order Details & Tracking */}
-      <div ref={trackingRef} className="py-16 bg-white">
-        <div className="container mx-auto px-4">
-          <div className="tracking-container opacity-0">
-            <div className="grid lg:grid-cols-3 gap-8">
-              
-              {/* Left Column - Order Summary */}
-              <div className="lg:col-span-1">
-                <div className="bg-gray-50 rounded-2xl p-6 sticky top-24">
-                  <h3 className="text-xl font-bold text-gray-800 mb-4">Order Summary</h3>
-                  
-                  <div className="space-y-3 mb-6">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Order ID:</span>
-                      <span className="font-semibold text-gray-800">{currentOrder.id}</span>
+      {currentOrder && (
+        <div ref={trackingRef} className="py-16 bg-white">
+          <div className="container mx-auto px-4">
+            <div ref={trackingContainerRef} className="opacity-0">
+              <div className="grid lg:grid-cols-3 gap-8">
+                
+                {/* Left Column - Order Summary */}
+                <div className="lg:col-span-1">
+                  <div className="bg-gray-50 rounded-2xl p-6 sticky top-24">
+                    <div className="flex justify-between items-start mb-4">
+                      <h3 className="text-xl font-bold text-gray-800">Order Summary</h3>
+                      {isCancellable && (
+                        <button
+                          onClick={() => setShowCancelModal(true)}
+                          disabled={cancellingOrder === currentOrder.id}
+                          className="text-red-600 hover:text-red-700 text-sm font-medium px-3 py-1 rounded-lg border border-red-200 hover:border-red-300 transition"
+                        >
+                          {cancellingOrder === currentOrder.id ? "Processing..." : getCancelButtonText(currentOrder.status)}
+                        </button>
+                      )}
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Order Date:</span>
-                      <span className="text-gray-800">{currentOrder.date}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Payment Method:</span>
-                      <span className="text-gray-800">{currentOrder.paymentMethod}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Carrier:</span>
-                      <span className="text-gray-800">{currentOrder.carrier}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Tracking Number:</span>
-                      <span className="text-orange-600 font-semibold">{currentOrder.trackingNumber}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="border-t border-gray-200 pt-4 mb-6">
-                    <h4 className="font-semibold text-gray-800 mb-2">Shipping Address</h4>
-                    <p className="text-gray-600 text-sm">{currentOrder.shippingAddress}</p>
-                  </div>
-                  
-                  <div className="border-t border-gray-200 pt-4">
-                    <h4 className="font-semibold text-gray-800 mb-2">Estimated Delivery</h4>
-                    <p className="text-orange-600 font-semibold">{currentOrder.estimatedDelivery}</p>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Right Column - Tracking & Items */}
-              <div className="lg:col-span-2">
-                {/* Tracking Status Bar */}
-                <div className="bg-orange-50 rounded-2xl p-6 mb-8">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(currentOrder.statusCode)}`}>
-                        {currentOrder.status}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-600">Tracking Number</p>
-                      <p className="font-mono text-orange-600 font-semibold">{currentOrder.trackingNumber}</p>
-                    </div>
-                  </div>
-                  
-                  {/* Step by Step Progress */}
-                  <div className="mt-6">
-                    <div className="relative">
-                      <div className="absolute top-5 left-0 right-0 h-1 bg-gray-200 rounded-full"></div>
-                      <div 
-                        className="absolute top-5 left-0 h-1 bg-orange-500 rounded-full transition-all duration-500"
-                        style={{ width: `${(activeStep / 5) * 100}%` }}
-                      ></div>
-                      
-                      <div className="relative flex justify-between">
-                        {steps.slice(0, 6).map((step, index) => (
-                          <div key={index} className="text-center" style={{ flex: 1 }}>
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 transition-all duration-300 ${
-                              index <= activeStep 
-                                ? "bg-orange-500 text-white shadow-lg" 
-                                : "bg-gray-200 text-gray-400"
-                            }`}>
-                              <span className="text-lg">{step.icon}</span>
-                            </div>
-                            <p className={`text-xs font-semibold ${index <= activeStep ? "text-orange-600" : "text-gray-400"}`}>
-                              {step.label}
-                            </p>
-                          </div>
-                        ))}
+                    
+                    <div className="space-y-3 mb-6">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Order ID:</span>
+                        <span className="font-semibold text-gray-800">{currentOrder.order_number}</span>
                       </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Order Date:</span>
+                        <span className="text-gray-800">{formatDate(currentOrder.created_at)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Status:</span>
+                        <span className={`font-semibold ${getStatusColor(currentOrder.status)} px-2 py-0.5 rounded-full text-xs`}>
+                          {getStatusText(currentOrder.status)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Shipping Method:</span>
+                        <span className="text-gray-800">{currentOrder.shipping_method || "Standard Shipping"}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="border-t border-gray-200 pt-4 mb-6">
+                      <h4 className="font-semibold text-gray-800 mb-2">Shipping Address</h4>
+                      <p className="text-gray-600 text-sm">{currentOrder.shipping_address}</p>
+                    </div>
+                    
+                    <div className="border-t border-gray-200 pt-4">
+                      <h4 className="font-semibold text-gray-800 mb-2">Contact Info</h4>
+                      <p className="text-gray-600 text-sm">{currentOrder.customer_name}</p>
+                      <p className="text-gray-600 text-sm">{currentOrder.customer_email}</p>
+                      <p className="text-gray-600 text-sm">{currentOrder.customer_phone}</p>
                     </div>
                   </div>
                 </div>
                 
-                {/* Parcel Location Tracking */}
-                <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-8">
-                  <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span>📍</span> Where is my parcel?
-                  </h3>
-                  
-                  <div className="space-y-4">
-                    {trackingLocations.map((location, index) => (
-                      <div key={index} className="flex gap-3">
+                {/* Right Column - Tracking & Items */}
+                <div className="lg:col-span-2">
+                  {/* Tracking Status Bar */}
+                  <div className="bg-orange-50 rounded-2xl p-6 mb-8">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="font-semibold text-gray-800">Order Status</h3>
+                        <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold mt-1 ${getStatusColor(currentOrder.status)}`}>
+                          {getStatusText(currentOrder.status)}
+                        </span>
+                      </div>
+                      {currentOrder.status === "delivered" && (
+                        <div className="text-green-600 text-sm font-semibold">✓ Completed</div>
+                      )}
+                      {currentOrder.status === "cancelled" && (
+                        <div className="text-red-600 text-sm font-semibold">✗ Cancelled</div>
+                      )}
+                    </div>
+                    
+                    {currentOrder.status !== "cancelled" && (
+                      <div className="mt-6">
                         <div className="relative">
-                          <div className={`w-4 h-4 rounded-full mt-1 ${location.completed ? "bg-orange-500" : "bg-gray-300"}`}></div>
-                          {index < trackingLocations.length - 1 && (
-                            <div className={`absolute top-5 left-1.5 w-0.5 h-12 ${location.completed ? "bg-orange-500" : "bg-gray-300"}`}></div>
-                          )}
-                        </div>
-                        <div className="flex-1 pb-6">
-                          <p className={`font-semibold ${location.completed ? "text-gray-800" : "text-gray-400"}`}>
-                            {location.location}
-                          </p>
-                          <p className={`text-sm ${location.completed ? "text-gray-600" : "text-gray-400"}`}>
-                            {location.status}
-                          </p>
-                          <p className={`text-xs mt-1 ${location.completed ? "text-gray-500" : "text-gray-400"}`}>
-                            {location.time}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                
-                {/* Order Items */}
-                <div className="bg-white border border-gray-200 rounded-2xl p-6">
-                  <h3 className="text-lg font-bold text-gray-800 mb-4">Order Items</h3>
-                  
-                  <div className="space-y-4">
-                    {currentOrder.itemsList.map((item, index) => (
-                      <div key={index} className="flex gap-4 pb-4 border-b border-gray-100 last:border-0">
-                        <img 
-                          src={item.image} 
-                          alt={item.name}
-                          className="w-16 h-16 rounded-lg object-cover"
-                        />
-                        <div className="flex-1">
-                          <p className="font-semibold text-gray-800">{item.name}</p>
-                          <p className="text-sm text-gray-500">Quantity: {item.quantity}</p>
-                          <p className="text-orange-600 font-semibold mt-1">₱{item.price.toFixed(2)}</p>
+                          <div className="absolute top-5 left-0 right-0 h-1 bg-gray-200 rounded-full"></div>
+                          <div 
+                            className="absolute top-5 left-0 h-1 bg-orange-500 rounded-full transition-all duration-500"
+                            style={{ width: `${getProgressPercentage(activeStep)}%` }}
+                          ></div>
+                          
+                          <div className="relative flex justify-between">
+                            {steps.map((step, index) => (
+                              <div key={index} className="text-center" style={{ flex: 1 }}>
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 transition-all duration-300 ${
+                                  index <= activeStep 
+                                    ? "bg-orange-500 text-white shadow-lg" 
+                                    : "bg-gray-200 text-gray-400"
+                                }`}>
+                                  <span className="text-lg">{step.icon}</span>
+                                </div>
+                                <p className={`text-xs font-semibold ${index <= activeStep ? "text-orange-600" : "text-gray-400"}`}>
+                                  {step.label}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    ))}
+                    )}
                   </div>
                   
-                  <div className="mt-6 pt-4 border-t border-gray-200">
-                    <div className="flex justify-between mb-2">
-                      <span className="text-gray-600">Subtotal</span>
-                      <span className="text-gray-800">₱{currentOrder.total.toFixed(2)}</span>
+                  {/* Order Items Detailed */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">Order Items</h3>
+                    
+                    <div className="space-y-4">
+                      {currentItems.map((item) => (
+                        <div key={item.id} className="flex gap-4 pb-4 border-b border-gray-100 last:border-0">
+                          <img 
+                            src={item.product?.image_url || "https://placehold.co/100x100?text=No+Image"} 
+                            alt={item.product?.name || "Product"}
+                            className="w-20 h-20 rounded-lg object-cover bg-gray-100"
+                          />
+                          <div className="flex-1">
+                            <p className="font-semibold text-gray-800">{item.product?.name || "Product"}</p>
+                            <div className="flex flex-wrap gap-3 text-sm text-gray-500 mt-1">
+                              {item.selected_size && item.selected_size !== "One Size" && (
+                                <span>Size: {item.selected_size}</span>
+                              )}
+                              {item.selected_color && (
+                                <span>Color: {item.selected_color}</span>
+                              )}
+                              <span>Quantity: {item.quantity}</span>
+                            </div>
+                            <p className="text-orange-600 font-semibold mt-2">{formatCurrency(item.price)} each</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-gray-800">{formatCurrency(item.price * item.quantity)}</p>
+                            <p className="text-xs text-gray-400">Total</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex justify-between mb-2">
-                      <span className="text-gray-600">Shipping</span>
-                      <span className="text-green-600">Free</span>
-                    </div>
-                    <div className="flex justify-between pt-2 border-t border-gray-200">
-                      <span className="text-lg font-bold text-gray-800">Total</span>
-                      <span className="text-xl font-bold text-orange-600">₱{currentOrder.total.toFixed(2)}</span>
+                    
+                    <div className="mt-6 pt-4 border-t border-gray-200">
+                      <div className="flex justify-between mb-2">
+                        <span className="text-gray-600">Subtotal</span>
+                        <span className="text-gray-800">{formatCurrency(currentOrder.subtotal)}</span>
+                      </div>
+                      <div className="flex justify-between mb-2">
+                        <span className="text-gray-600">Shipping</span>
+                        <span className="text-green-600">{currentOrder.shipping_cost > 0 ? formatCurrency(currentOrder.shipping_cost) : "Free"}</span>
+                      </div>
+                      <div className="flex justify-between pt-2 border-t border-gray-200">
+                        <span className="text-lg font-bold text-gray-800">Total</span>
+                        <span className="text-xl font-bold text-orange-600">{formatCurrency(currentOrder.total)}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                
-                {/* Need Help */}
-                <div className="mt-6 p-4 bg-orange-50 rounded-xl text-center">
-                  <p className="text-gray-700">Need help with your order?</p>
-                  <Link href="/contact" className="text-orange-600 font-semibold hover:underline inline-flex items-center gap-1 mt-1">
-                    Contact Support →
-                  </Link>
+                  
+                  {/* Need Help */}
+                  <div className="mt-6 p-4 bg-orange-50 rounded-xl text-center">
+                    <p className="text-gray-700">Need help with your order?</p>
+                    <Link href="/contact" className="text-orange-600 font-semibold hover:underline inline-flex items-center gap-1 mt-1">
+                      Contact Support →
+                    </Link>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Cancel Order Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-800">Cancel Order</h3>
+              <button
+                onClick={() => setShowCancelModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-gray-600 mb-2">
+                Are you sure you want to cancel this order?
+              </p>
+              {currentOrder?.payment_intent_id && (
+                <p className="text-sm text-orange-600 bg-orange-50 p-3 rounded-lg">
+                  {currentOrder.status === "processing" || currentOrder.status === "paid" 
+                    ? "⚠️ This order has been paid. Cancelling will process a refund to your original payment method."
+                    : "⚠️ No payment has been processed yet."}
+                </p>
+              )}
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Reason for cancellation (optional)
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="e.g., Changed my mind, Found better price, etc."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+                rows={3}
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCancelModal(false)}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+              >
+                Keep Order
+              </button>
+              <button
+                onClick={handleCancelOrder}
+                disabled={cancellingOrder === currentOrder?.id}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition disabled:opacity-50"
+              >
+                {cancellingOrder === currentOrder?.id ? "Processing..." : "Yes, Cancel Order"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
