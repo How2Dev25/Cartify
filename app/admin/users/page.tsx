@@ -22,15 +22,22 @@ interface User {
   province?: string;
   postal_code?: string;
   country?: string;
-  orders_count?: number;
-  total_spent?: number;
 }
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedRole, setSelectedRole] = useState("all");
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  
   const [formData, setFormData] = useState({
     email: "",
     first_name: "",
@@ -66,7 +73,12 @@ export default function AdminUsersPage() {
     fetchUsers();
   }, []);
 
-  // Fetch all users with their order stats
+  // Apply filters whenever dependencies change
+  useEffect(() => {
+    filterAndSortUsers();
+  }, [users, searchQuery, selectedRole]);
+
+  // Fetch all users
   const fetchUsers = async () => {
     try {
       setLoading(true);
@@ -78,38 +90,54 @@ export default function AdminUsersPage() {
 
       if (usersError) throw usersError;
 
-      const usersWithStats = await Promise.all(
-        (usersData || []).map(async (user) => {
-          const { data: orders, error: ordersError } = await supabase
-            .from('orders')
-            .select('total_amount')
-            .eq('user_id', user.id);
-
-          if (ordersError) {
-            return {
-              ...user,
-              orders_count: 0,
-              total_spent: 0,
-            };
-          }
-
-          const total_spent = orders?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
-          
-          return {
-            ...user,
-            orders_count: orders?.length || 0,
-            total_spent,
-          };
-        })
-      );
-
-      setUsers(usersWithStats);
+      setUsers(usersData || []);
     } catch (error: any) {
       console.error('Error fetching users:', error);
       setError(error.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const filterAndSortUsers = () => {
+    let filtered = [...users];
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(user => 
+        user.email?.toLowerCase().includes(query) ||
+        user.first_name?.toLowerCase().includes(query) ||
+        user.last_name?.toLowerCase().includes(query) ||
+        `${user.first_name} ${user.last_name}`.toLowerCase().includes(query)
+      );
+    }
+
+    // Role filter
+    if (selectedRole !== "all") {
+      filtered = filtered.filter(user => user.role === selectedRole);
+    }
+
+    setFilteredUsers(filtered);
+    setTotalPages(Math.ceil(filtered.length / itemsPerPage));
+    setCurrentPage(1);
+  };
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setSelectedRole("all");
+  };
+
+  // Get current page items
+  const getCurrentPageItems = () => {
+    const indexOfLastItem = currentPage * itemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    return filteredUsers.slice(indexOfFirstItem, indexOfLastItem);
+  };
+
+  const paginate = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+    document.getElementById('users-table')?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -136,14 +164,12 @@ export default function AdminUsersPage() {
 
     setUploadingAvatar(true);
     
-    // Convert to base64 for preview
     const reader = new FileReader();
     reader.onloadend = () => {
       setAvatarPreview(reader.result as string);
     };
     reader.readAsDataURL(file);
 
-    // Upload to Supabase
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -200,7 +226,6 @@ export default function AdminUsersPage() {
     setSuccess("");
     setShowModal(true);
     
-    // GSAP entrance animation
     setTimeout(() => {
       if (modalContentRef.current) {
         gsap.fromTo(modalContentRef.current,
@@ -375,38 +400,38 @@ export default function AdminUsersPage() {
   };
 
   // Delete user
- const deleteUser = async (userId: string) => {
-  try {
-    // Delete from users table
-    const { error: deleteError } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', userId);
+  const deleteUser = async (userId: string) => {
+    try {
+      // Delete from users table
+      const { error: deleteError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
 
-    if (deleteError) throw deleteError;
+      if (deleteError) throw deleteError;
 
-    // Call server API to delete from auth
-    const response = await fetch('/api/admin/users', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId }),
-    });
+      // Call server API to delete from auth
+      const response = await fetch('/api/admin/users', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
 
-    if (!response.ok) {
-      console.error('Failed to delete auth user');
+      if (!response.ok) {
+        console.error('Failed to delete auth user');
+      }
+
+      setSuccess("User deleted successfully!");
+      closeDeleteConfirm();
+      await fetchUsers();
+      
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      setError(error.message);
+      setTimeout(() => setError(""), 3000);
     }
-
-    setSuccess("User deleted successfully!");
-    closeDeleteConfirm();
-    await fetchUsers();
-    
-    setTimeout(() => setSuccess(""), 3000);
-  } catch (error: any) {
-    console.error('Error deleting user:', error);
-    setError(error.message);
-    setTimeout(() => setError(""), 3000);
-  }
-};
+  };
 
   const getFullName = (user: User) => {
     return [user.first_name, user.last_name].filter(Boolean).join(" ") || "N/A";
@@ -419,6 +444,10 @@ export default function AdminUsersPage() {
     if (first) return first.toUpperCase();
     return user.email?.charAt(0).toUpperCase() || "U";
   };
+
+  const currentUsers = getCurrentPageItems();
+  const startIndex = (currentPage - 1) * itemsPerPage + 1;
+  const endIndex = Math.min(currentPage * itemsPerPage, filteredUsers.length);
 
   if (loading) {
     return (
@@ -434,7 +463,7 @@ export default function AdminUsersPage() {
   return (
     <>
       <div className="space-y-6">
-        {/* Success/Error Messages with animations */}
+        {/* Success/Error Messages */}
         {success && (
           <div className="success-message bg-gradient-to-r from-green-50 to-emerald-50 border-l-4 border-green-500 text-green-700 px-4 py-3 rounded-lg shadow-sm">
             <div className="flex items-center gap-2">
@@ -458,23 +487,72 @@ export default function AdminUsersPage() {
 
         {/* Users Table */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">User Management</h3>
-              <p className="text-sm text-gray-500 mt-1">Manage customers and administrators</p>
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">User Management</h3>
+                <p className="text-sm text-gray-500 mt-1">Manage customers and administrators</p>
+              </div>
+              <button
+                onClick={() => openModal()}
+                className="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all duration-200 text-sm font-medium flex items-center gap-2 shadow-md hover:shadow-lg"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add User
+              </button>
             </div>
-            <button
-              onClick={() => openModal()}
-              className="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all duration-200 text-sm font-medium flex items-center gap-2 shadow-md hover:shadow-lg"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add User
-            </button>
+
+            {/* Search and Filters Bar */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              {/* Search Input */}
+              <div className="md:col-span-2">
+                <div className="relative">
+                  <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Search by name or email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition text-gray-900"
+                  />
+                </div>
+              </div>
+
+              {/* Role Filter */}
+              <select
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition text-gray-900"
+              >
+                <option value="all">All Roles</option>
+                <option value="customer">Customers</option>
+                <option value="admin">Administrators</option>
+              </select>
+            </div>
+
+            {/* Clear Filters */}
+            {(searchQuery || selectedRole !== "all") && (
+              <div className="mt-3 text-right">
+                <button
+                  onClick={clearFilters}
+                  className="text-sm text-orange-600 hover:text-orange-700 font-medium"
+                >
+                  Clear all filters
+                </button>
+              </div>
+            )}
+
+            {/* Results Count */}
+            <div className="mt-4 text-sm text-gray-500">
+              Showing {filteredUsers.length > 0 ? startIndex : 0} to {endIndex} of {filteredUsers.length} users
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" id="users-table">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
@@ -482,14 +560,12 @@ export default function AdminUsersPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Orders</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Spent</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Joined</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {users.map((user) => (
+                {currentUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50 transition group">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -502,7 +578,6 @@ export default function AdminUsersPage() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-gray-900">{getFullName(user)}</p>
-                          
                         </div>
                       </div>
                     </td>
@@ -517,10 +592,6 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">{user.phone || "—"}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">{user.orders_count || 0}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                      ₱{(user.total_spent || 0).toLocaleString()}
-                    </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {new Date(user.created_at).toLocaleDateString()}
                     </td>
@@ -546,15 +617,79 @@ export default function AdminUsersPage() {
             </table>
           </div>
 
-          {users.length === 0 && (
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
+              <button
+                onClick={() => paginate(currentPage - 1)}
+                disabled={currentPage === 1}
+                className={`px-3 py-1 rounded-lg text-sm font-medium transition ${
+                  currentPage === 1
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Previous
+              </button>
+              
+              <div className="flex gap-2">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => paginate(pageNum)}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition ${
+                        currentPage === pageNum
+                          ? 'bg-orange-500 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+              
+              <button
+                onClick={() => paginate(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className={`px-3 py-1 rounded-lg text-sm font-medium transition ${
+                  currentPage === totalPages
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Next
+              </button>
+            </div>
+          )}
+
+          {filteredUsers.length === 0 && (
             <div className="text-center py-12">
-              <p className="text-gray-500">No users found</p>
+              <p className="text-gray-500">No users found matching your filters</p>
+              <button
+                onClick={clearFilters}
+                className="mt-4 text-orange-500 hover:text-orange-600 font-medium"
+              >
+                Clear all filters
+              </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Add/Edit User Modal */}
+      {/* Add/Edit User Modal (same as before) */}
       {showModal && (
         <div 
           ref={modalRef}

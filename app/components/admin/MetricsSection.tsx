@@ -1,21 +1,20 @@
-// app/components/admin/MetricsSection.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import MetricCard from "./MetricCard";
-import { fetchDashboardMetrics } from "@/app/lib/dashboardData";  // Fixed: changed @app to @/app
-import type { DashboardMetrics } from "@/app/lib/dashboardData";  // Fixed: changed @app to @/app
-import { supabase } from "@/app/lib/supabase";  // Added missing import
+import { fetchDashboardMetrics } from "@/app/lib/dashboardData";
+import type { DashboardMetrics } from "@/app/lib/dashboardData";
 
 export default function MetricsSection() {
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     totalProducts: 0,
     lowStock: 0,
-    totalUsers: 0,  // Fixed: was totallUsers (typo)
+    totalUsers: 0,
+    totalOrders: 0,
+    totalRevenue: 0,
+    pendingOrders: 0,
+    averageOrderValue: 0,
   });
-  const [totalOrders, setTotalOrders] = useState(0);
-  const [totalRevenue, setTotalRevenue] = useState(0);
-  const [pendingOrders, setPendingOrders] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,30 +23,8 @@ export default function MetricsSection() {
 
   const loadMetrics = async () => {
     setLoading(true);
-    
-    // Fetch basic metrics
-    const basicMetrics = await fetchDashboardMetrics();
-    setMetrics(basicMetrics);
-    
-    // Fetch orders data
-    try {
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('total_amount, status');
-      
-      if (orders) {
-        const total = orders.length;
-        const revenue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
-        const pending = orders.filter(order => order.status === 'pending' || order.status === 'processing').length;
-        
-        setTotalOrders(total);
-        setTotalRevenue(revenue);
-        setPendingOrders(pending);
-      }
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-    }
-    
+    const data = await fetchDashboardMetrics();
+    setMetrics(data);
     setLoading(false);
   };
 
@@ -95,9 +72,9 @@ export default function MetricsSection() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard
           title="Total Orders"
-          value={totalOrders}
+          value={metrics.totalOrders}
           icon={<IconCart />}
-          change="↑ from last month"
+          change="All time orders"
           color="orange"
         />
         <MetricCard
@@ -111,14 +88,14 @@ export default function MetricsSection() {
           title="Total Users"
           value={metrics.totalUsers}
           icon={<IconUsers />}
-          change="↑ from last month"
+          change="Registered customers"
           color="green"
         />
         <MetricCard
           title="Total Revenue"
-          value={`₱${totalRevenue.toLocaleString()}`}
+          value={`₱${metrics.totalRevenue.toLocaleString()}`}
           icon={<IconMoney />}
-          change="↑ from last month"
+          change="Lifetime sales"
           color="purple"
         />
       </div>
@@ -132,15 +109,15 @@ export default function MetricsSection() {
               Urgent
             </span>
           </div>
-          <p className="text-3xl font-bold text-yellow-600">{pendingOrders}</p>
+          <p className="text-3xl font-bold text-yellow-600">{metrics.pendingOrders}</p>
           <div className="mt-4 h-2 bg-gray-200 rounded-full">
             <div 
               className="h-2 bg-yellow-600 rounded-full" 
-              style={{ width: totalOrders > 0 ? `${(pendingOrders / totalOrders) * 100}%` : '0%' }}
+              style={{ width: metrics.totalOrders > 0 ? `${(metrics.pendingOrders / metrics.totalOrders) * 100}%` : '0%' }}
             ></div>
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            {totalOrders > 0 ? Math.round((pendingOrders / totalOrders) * 100) : 0}% of total orders
+            {metrics.totalOrders > 0 ? Math.round((metrics.pendingOrders / metrics.totalOrders) * 100) : 0}% of total orders
           </p>
         </div>
         
@@ -166,13 +143,13 @@ export default function MetricsSection() {
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <p className="text-sm font-medium text-gray-500 mb-2">Average Order Value</p>
           <p className="text-3xl font-bold text-gray-900">
-            ₱{totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : '0'}
+            ₱{metrics.averageOrderValue.toFixed(2)}
           </p>
-          <p className="text-sm text-green-600 mt-2">Current average</p>
+          <p className="text-sm text-green-600 mt-2">Average per transaction</p>
           <div className="mt-4 flex gap-2 text-xs text-gray-500">
-            <span>Total Orders: {totalOrders}</span>
+            <span>Total Orders: {metrics.totalOrders}</span>
             <span>•</span>
-            <span>Revenue: ₱{totalRevenue.toLocaleString()}</span>
+            <span>Revenue: ₱{metrics.totalRevenue.toLocaleString()}</span>
           </div>
         </div>
       </div>
