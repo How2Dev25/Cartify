@@ -6,6 +6,15 @@ import { useParams, useRouter } from "next/navigation";
 import { routes } from "@/app/routes";
 import { supabase } from "@/app/lib/supabase";
 import { addToCart, getCartItemCount } from "@/app/lib/cart";
+import {
+  Review,
+  ReviewStats,
+  fetchProductReviews,
+  computeReviewStats,
+  createReview,
+  updateReview,
+  deleteReview,
+} from "@/app/lib/reviews";
 
 interface Product {
   id: string;
@@ -90,6 +99,20 @@ export default function ProductPage() {
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [cartCount, setCartCount] = useState(0);
 
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewStats, setReviewStats] = useState<ReviewStats>({ average: 0, total: 0, breakdown: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } });
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [newRating, setNewRating] = useState(0);
+  const [newComment, setNewComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+  const [editingReview, setEditingReview] = useState<Review | null>(null);
+  const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
+  const [newVideoFile, setNewVideoFile] = useState<File | null>(null);
+  const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
+
   // Fetch product data
   useEffect(() => {
     const fetchProduct = async () => {
@@ -155,6 +178,97 @@ export default function ProductPage() {
     };
     loadCartCount();
   }, []);
+
+  // Load reviews
+  useEffect(() => {
+    const loadReviews = async () => {
+      if (!params?.id) return;
+      setReviewLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      const data = await fetchProductReviews(params.id as string);
+      setReviews(data);
+      setReviewStats(computeReviewStats(data));
+      if (user) {
+        setCurrentUserId(user.id);
+      }
+      setReviewLoading(false);
+    };
+    loadReviews();
+  }, [params?.id]);
+
+  const handleSubmitReview = async () => {
+    if (!params?.id || newRating === 0) return;
+    setSubmittingReview(true);
+    setReviewError("");
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.push(`/auth/login?redirect=${routes.productDetail(params.id as string)}`);
+      setSubmittingReview(false);
+      return;
+    }
+
+    // Upload new images
+    const imageUrls: string[] = editingReview?.images?.filter(Boolean) || [];
+    for (const file of newImageFiles) {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload/review", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.success) imageUrls.push(data.url);
+    }
+
+    // Upload video
+    let videoUrl = editingReview?.video || "";
+    if (newVideoFile) {
+      const formData = new FormData();
+      formData.append("file", newVideoFile);
+      const res = await fetch("/api/upload/review", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.success) videoUrl = data.url;
+    }
+
+    let result;
+    if (editingReview) {
+      result = await updateReview(editingReview.id, user.id, newRating, newComment || undefined, imageUrls.length ? imageUrls : undefined, videoUrl || undefined);
+    } else {
+      result = await createReview(params.id as string, user.id, newRating, newComment || undefined, imageUrls.length ? imageUrls : undefined, videoUrl || undefined);
+    }
+    if (result.success) {
+      setShowReviewForm(false);
+      setEditingReview(null);
+      setNewRating(0);
+      setNewComment("");
+      setNewImageFiles([]);
+      setNewVideoFile(null);
+      const updated = await fetchProductReviews(params.id as string);
+      setReviews(updated);
+      setReviewStats(computeReviewStats(updated));
+    } else {
+      setReviewError(result.error || "Failed to submit review");
+    }
+    setSubmittingReview(false);
+  };
+
+  const handleEditReview = (review: Review) => {
+    setEditingReview(review);
+    setNewRating(review.rating);
+    setNewComment(review.comment || "");
+    setNewImageFiles([]);
+    setNewVideoFile(null);
+    setShowReviewForm(true);
+  };
+
+  const handleDeleteReview = async (reviewId: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const result = await deleteReview(reviewId, user.id);
+    if (result.success) {
+      setDeletingReviewId(null);
+      const updated = await fetchProductReviews(params.id as string);
+      setReviews(updated);
+      setReviewStats(computeReviewStats(updated));
+    }
+  };
 
   // Get images array (use images JSON or fallback to single image_url)
   const getProductImages = () => {
@@ -428,6 +542,8 @@ export default function ProductPage() {
           25% { transform: translateX(-5px); }
           75% { transform: translateX(5px); }
         }
+
+        .star-picker .star-btn svg { transition: opacity 0.15s; }
       `}</style>
 
       <div className="pdp-root">
@@ -690,15 +806,17 @@ export default function ProductPage() {
             )}
             {activeTab === "reviews" && (
               <div>
+                {/* Stats summary */}
                 <div style={{ display: "flex", alignItems: "center", gap: 20, padding: "24px", background: "#fff", borderRadius: 16, border: "1px solid #f0f0ee", marginBottom: 24 }}>
-                  <div style={{ textAlign: "center" }}>
-                    <p style={{ fontSize: 48, fontWeight: 700, color: "#111110", margin: 0, lineHeight: 1 }}>0</p>
-                    <Stars rating={0} size={16} />
-                    <p style={{ fontSize: 12, color: "#9ca3af", margin: "6px 0 0" }}>0 reviews</p>
+                  <div style={{ textAlign: "center", minWidth: 100 }}>
+                    <p style={{ fontSize: 48, fontWeight: 700, color: "#111110", margin: 0, lineHeight: 1 }}>{reviewStats.average}</p>
+                    <Stars rating={reviewStats.average} size={16} />
+                    <p style={{ fontSize: 12, color: "#9ca3af", margin: "6px 0 0" }}>{reviewStats.total} {reviewStats.total === 1 ? "review" : "reviews"}</p>
                   </div>
                   <div style={{ flex: 1 }}>
                     {[5,4,3,2,1].map((star) => {
-                      const pct = 0;
+                      const count = reviewStats.breakdown[star] || 0;
+                      const pct = reviewStats.total > 0 ? (count / reviewStats.total) * 100 : 0;
                       return (
                         <div key={star} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                           <span style={{ fontSize: 12, color: "#9ca3af", width: 8 }}>{star}</span>
@@ -706,13 +824,241 @@ export default function ProductPage() {
                           <div style={{ flex: 1, height: 6, background: "#f3f4f6", borderRadius: 100, overflow: "hidden" }}>
                             <div style={{ width: `${pct}%`, height: "100%", background: "#f97316", borderRadius: 100 }} />
                           </div>
-                          <span style={{ fontSize: 12, color: "#9ca3af", width: 28 }}>{pct}%</span>
+                          <span style={{ fontSize: 12, color: "#9ca3af", width: 28 }}>{Math.round(pct)}%</span>
                         </div>
                       );
                     })}
                   </div>
                 </div>
-                <p style={{ fontSize: 14, color: "#9ca3af", textAlign: "center" }}>Be the first to review this product!</p>
+
+                {/* Review form trigger / form */}
+                {!showReviewForm ? (
+                  <div style={{ textAlign: "center", marginBottom: 32 }}>
+                    <button
+                      onClick={async () => {
+                        const { data: { user } } = await supabase.auth.getUser();
+                        if (!user) {
+                          router.push(`/auth/login?redirect=${routes.productDetail(product.id)}`);
+                          return;
+                        }
+                        setShowReviewForm(true);
+                        setEditingReview(null);
+                        setNewRating(0);
+                        setNewComment("");
+                        setNewImageFiles([]);
+                        setNewVideoFile(null);
+                        setReviewError("");
+                      }}
+                      style={{ padding: "10px 28px", background: "#f97316", color: "#fff", borderRadius: 100, border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+                    >
+                      Write a Review
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ padding: "24px", background: "#fff", borderRadius: 16, border: "1px solid #f0f0ee", marginBottom: 32 }}>
+                    <p style={{ fontSize: 15, fontWeight: 600, color: "#111110", marginBottom: 16 }}>
+                      {editingReview ? "Edit Your Review" : "Write Your Review"}
+                    </p>
+                    {/* Star selector */}
+                    <div className="star-picker-inner" style={{ display: "flex", gap: 4, marginBottom: 16 }}>
+                      {[1, 2, 3, 4, 5].map((s) => {
+                        const isFilled = s <= newRating;
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => setNewRating(s)}
+                            onMouseEnter={(e) => {
+                              const parent = e.currentTarget.parentElement;
+                              if (!parent) return;
+                              Array.from(parent.children).forEach((child, i) => {
+                                const svg = child.querySelector("svg");
+                                if (svg) {
+                                  svg.style.opacity = i < s ? "1" : "0.3";
+                                  svg.style.fill = i < s ? "#f97316" : "none";
+                                }
+                              });
+                            }}
+                            onMouseLeave={() => {
+                              const parent = document.querySelector(".star-picker-inner");
+                              if (!parent) return;
+                              Array.from(parent.children).forEach((child, i) => {
+                                const svg = child.querySelector("svg");
+                                if (svg) {
+                                  svg.style.opacity = i < newRating ? "1" : "0.3";
+                                  svg.style.fill = i < newRating ? "#f97316" : "none";
+                                }
+                              });
+                            }}
+                            style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                          >
+                            <svg width="28" height="28" viewBox="0 0 24 24"
+                              fill={isFilled ? "#f97316" : "none"}
+                              stroke="#f97316" strokeWidth="1.8"
+                              style={{ opacity: isFilled ? 1 : 0.3, transition: "opacity 0.15s" }}>
+                              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                            </svg>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <textarea
+                      placeholder="Share your thoughts about this product..."
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      rows={4}
+                      style={{ width: "100%", padding: 12, borderRadius: 12, border: "1px solid #e5e7eb", fontSize: 14, fontFamily: "'DM Sans', sans-serif", resize: "vertical", outline: "none", boxSizing: "border-box" }}
+                    />
+                    {/* Image uploads */}
+                    <div style={{ marginTop: 12 }}>
+                      <p style={{ fontSize: 12, fontWeight: 500, color: "#374151", marginBottom: 6 }}>Photos (max 5MB each)</p>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        multiple
+                        onChange={(e) => setNewImageFiles(Array.from(e.target.files || []))}
+                        style={{ width: "100%", padding: 8, borderRadius: 12, border: "1px solid #e5e7eb", fontSize: 13, fontFamily: "'DM Sans', sans-serif", outline: "none", boxSizing: "border-box" }}
+                      />
+                      {newImageFiles.length > 0 && (
+                        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                          {newImageFiles.map((f, i) => (
+                            <div key={i} style={{ position: "relative" }}>
+                              <img src={URL.createObjectURL(f)} alt={`Preview ${i + 1}`}
+                                style={{ width: 64, height: 64, borderRadius: 8, objectFit: "cover", border: "1px solid #f0f0ee" }} />
+                              <button onClick={() => setNewImageFiles((prev) => prev.filter((_, j) => j !== i))}
+                                style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%", background: "#dc2626", color: "#fff", border: "none", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {editingReview && editingReview.images && editingReview.images.length > 0 && (
+                        <div style={{ marginTop: 8 }}>
+                          <p style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>Current images:</p>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            {editingReview.images.map((url, i) => (
+                              <img key={i} src={url} alt={`Current ${i + 1}`}
+                                style={{ width: 48, height: 48, borderRadius: 6, objectFit: "cover", border: "1px solid #f0f0ee" }} />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* Video upload */}
+                    <div style={{ marginTop: 8 }}>
+                      <p style={{ fontSize: 12, fontWeight: 500, color: "#374151", marginBottom: 6 }}>Video (optional, max 50MB)</p>
+                      <input
+                        type="file"
+                        accept="video/mp4,video/webm,video/ogg"
+                        onChange={(e) => setNewVideoFile(e.target.files?.[0] || null)}
+                        style={{ width: "100%", padding: 8, borderRadius: 12, border: "1px solid #e5e7eb", fontSize: 13, fontFamily: "'DM Sans', sans-serif", outline: "none", boxSizing: "border-box" }}
+                      />
+                      {newVideoFile && (
+                        <p style={{ fontSize: 11, color: "#16a34a", marginTop: 4 }}>{newVideoFile.name} selected</p>
+                      )}
+                      {editingReview && editingReview.video && !newVideoFile && (
+                        <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>Current video: {editingReview.video}</p>
+                      )}
+                    </div>
+                    {reviewError && <p style={{ color: "#dc2626", fontSize: 12, marginTop: 8 }}>{reviewError}</p>}
+                    <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+                      <button
+                        onClick={handleSubmitReview}
+                        disabled={submittingReview || newRating === 0}
+                        style={{ padding: "10px 28px", background: newRating === 0 ? "#d1d5db" : "#f97316", color: "#fff", borderRadius: 100, border: "none", fontSize: 14, fontWeight: 500, cursor: newRating === 0 ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif" }}
+                      >
+                        {submittingReview ? "Submitting..." : editingReview ? "Update Review" : "Submit Review"}
+                      </button>
+                      <button
+                        onClick={() => { setShowReviewForm(false); setEditingReview(null); setNewRating(0); setNewComment(""); setNewImageFiles([]); setNewVideoFile(null); setReviewError(""); }}
+                        style={{ padding: "10px 28px", background: "#fff", color: "#6b7280", borderRadius: 100, border: "1px solid #e5e7eb", fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Review list */}
+                {reviewLoading ? (
+                  <p style={{ fontSize: 14, color: "#9ca3af", textAlign: "center" }}>Loading reviews...</p>
+                ) : reviews.length === 0 ? (
+                  <p style={{ fontSize: 14, color: "#9ca3af", textAlign: "center" }}>Be the first to review this product!</p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    {reviews.map((review) => (
+                      <div key={review.id} style={{ padding: "20px", background: "#fff", borderRadius: 16, border: "1px solid #f0f0ee" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600, color: "#6b7280", overflow: "hidden" }}>
+                            {review.user?.avatar_url ? (
+                              <img src={review.user.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            ) : (
+                              ((review.user?.first_name?.[0] || "U") + (review.user?.last_name?.[0] || "")).toUpperCase()
+                            )}
+                          </div>
+                          <div>
+                            <p style={{ fontSize: 14, fontWeight: 600, color: "#111110", margin: 0 }}>
+                              {review.user ? `${review.user.first_name} ${review.user.last_name}` : "Anonymous"}
+                            </p>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <Stars rating={review.rating} size={12} />
+                              <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                                {new Date(review.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        {review.comment && (
+                          <p style={{ fontSize: 14, color: "#4b5563", lineHeight: 1.6, margin: 0, fontWeight: 300 }}>{review.comment}</p>
+                        )}
+                        {review.images && review.images.length > 0 && (
+                          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                            {review.images.map((url, i) => (
+                              <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                <img src={url} alt={`Review photo ${i + 1}`}
+                                  style={{ width: 80, height: 80, borderRadius: 10, objectFit: "cover", border: "1px solid #f0f0ee" }} />
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                        {review.video && (
+                          <div style={{ marginTop: 12 }}>
+                            <a href={review.video} target="_blank" rel="noopener noreferrer"
+                              style={{ fontSize: 13, color: "#f97316", textDecoration: "underline", textUnderlineOffset: 3 }}>
+                              ▶ Watch Video
+                            </a>
+                          </div>
+                        )}
+                        {currentUserId === review.user_id && (
+                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12, paddingTop: 12, borderTop: "1px solid #f3f4f6" }}>
+                            <button onClick={() => handleEditReview(review)}
+                              style={{ padding: "6px 16px", background: "#fff", color: "#f97316", borderRadius: 100, border: "1px solid #f97316", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                              Edit
+                            </button>
+                            {deletingReviewId === review.id ? (
+                              <span style={{ fontSize: 12, color: "#6b7280", display: "flex", alignItems: "center", gap: 8 }}>
+                                Delete?
+                                <button onClick={() => handleDeleteReview(review.id)}
+                                  style={{ padding: "4px 12px", background: "#dc2626", color: "#fff", borderRadius: 100, border: "none", fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                                  Yes
+                                </button>
+                                <button onClick={() => setDeletingReviewId(null)}
+                                  style={{ padding: "4px 12px", background: "#fff", color: "#6b7280", borderRadius: 100, border: "1px solid #d1d5db", fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                                  No
+                                </button>
+                              </span>
+                            ) : (
+                              <button onClick={() => setDeletingReviewId(review.id)}
+                                style={{ padding: "6px 16px", background: "#fff", color: "#dc2626", borderRadius: 100, border: "1px solid #e5e7eb", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

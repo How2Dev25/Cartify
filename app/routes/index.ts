@@ -20,6 +20,7 @@ export const routes = {
   dashboard: "/dashboard",
   account: "/account",
   orders: "/account/orders",
+  reviews: "/account/reviews",
   wishlist: "/account/wishlist",
   profile: "/account/profile",
 

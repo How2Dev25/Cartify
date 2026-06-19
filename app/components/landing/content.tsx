@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes";
 import { supabase } from "@/app/lib/supabase";
+import { ReviewStats, fetchProductsWithRatings } from "@/app/lib/reviews";
 
 interface Product {
   id: string;
@@ -57,7 +58,7 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-function ProductCard({ product }: { product: Product }) {
+function ProductCard({ product, rating }: { product: Product; rating?: ReviewStats }) {
   const [wished, setWished] = useState(false);
   const router = useRouter();
   const inStock = product.stock > 0;
@@ -119,7 +120,12 @@ function ProductCard({ product }: { product: Product }) {
         </p>
         <h3 className="product-name">{product.name}</h3>
 
-        
+        {rating && rating.total > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
+            <StarRating rating={rating.average} />
+            <span style={{ fontSize: 11, color: "#9ca3af" }}>({rating.total})</span>
+          </div>
+        )}
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
@@ -142,6 +148,7 @@ export default function ProductSection() {
   const [sortBy, setSortBy] = useState("featured");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [productRatings, setProductRatings] = useState<Record<string, ReviewStats>>({});
 
   // Fetch products from Supabase
   useEffect(() => {
@@ -155,6 +162,12 @@ export default function ProductSection() {
 
         if (error) throw error;
         setProducts(data || []);
+        // Fetch ratings for all products
+        if (data && data.length > 0) {
+          const ids = data.map((p) => p.id);
+          const ratings = await fetchProductsWithRatings(ids);
+          setProductRatings(ratings);
+        }
       } catch (error: any) {
         console.error('Error fetching products:', error);
       } finally {
@@ -186,6 +199,15 @@ export default function ProductSection() {
         return [...filtered].sort((a, b) => a.price - b.price);
       case "price-high":
         return [...filtered].sort((a, b) => b.price - a.price);
+      case "rating":
+        return [...filtered].sort((a, b) => {
+          const aRating = productRatings[a.id]?.average || 0;
+          const bRating = productRatings[b.id]?.average || 0;
+          if (bRating !== aRating) return bRating - aRating;
+          const aCount = productRatings[a.id]?.total || 0;
+          const bCount = productRatings[b.id]?.total || 0;
+          return bCount - aCount;
+        });
       default:
         // Featured: show is_featured first, then by creation date
         return [...filtered].sort((a, b) => {
@@ -605,7 +627,7 @@ export default function ProductSection() {
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 20 }}>
               {filteredProducts.map((product) => (
-                <ProductCard key={product.id} product={product} />
+                <ProductCard key={product.id} product={product} rating={productRatings[product.id]} />
               ))}
             </div>
           )}

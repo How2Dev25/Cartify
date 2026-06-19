@@ -841,6 +841,13 @@ export function Navbar() {
                       My Orders {ordersCount > 0 && `(${ordersCount})`}
                     </Link>
 
+                    <Link href={routes.reviews} className="dropdown-item" onClick={() => setDropdownOpen(false)} role="menuitem">
+                      <span className="dropdown-item-icon">
+                        <svg viewBox="0 0 24 24"><path d="M12 20l-1.5-1.5L9 20l-3-1.5v-3h-1a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v9"/><path d="M15 5v2"/><rect x="3" y="9" width="18" height="12" rx="2"/><circle cx="12" cy="14" r="1.5"/><path d="M3 14h2"/><path d="M19 14h2"/></svg>
+                      </span>
+                      My Reviews
+                    </Link>
+
                     <Link href="/cart" className="dropdown-item" onClick={() => setDropdownOpen(false)} role="menuitem">
                       <span className="dropdown-item-icon">
                         <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
@@ -926,6 +933,10 @@ export function Navbar() {
               <Link href={routes.orders} className="mobile-action-btn" onClick={() => setMobileOpen(false)}>
                 <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
                 My Orders {ordersCount > 0 && `(${ordersCount})`}
+              </Link>
+              <Link href={routes.reviews} className="mobile-action-btn" onClick={() => setMobileOpen(false)}>
+                <svg viewBox="0 0 24 24"><path d="M12 20l-1.5-1.5L9 20l-3-1.5v-3h-1a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v9"/><path d="M15 5v2"/><rect x="3" y="9" width="18" height="12" rx="2"/><circle cx="12" cy="14" r="1.5"/><path d="M3 14h2"/><path d="M19 14h2"/></svg>
+                My Reviews
               </Link>
               <Link href="/cart" className="mobile-action-btn" onClick={() => setMobileOpen(false)}>
                 <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>

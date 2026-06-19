@@ -7,6 +7,7 @@ const menuItems = [
   { id: "dashboard", label: "Dashboard", href: "/admin" },
   { id: "orders", label: "Orders", href: "/admin/orders" },
   { id: "products", label: "Products", href: "/admin/products" },
+  { id: "reviews", label: "Reviews", href: "/admin/reviews" },
   { id: "users", label: "Users", href: "/admin/users" },
 ];
 
