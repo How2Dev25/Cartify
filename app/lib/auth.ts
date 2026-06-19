@@ -89,10 +89,11 @@ export async function signIn(email: string, password: string) {
 // Google Sign In - Always creates customer role
 export async function signInWithGoogle() {
   try {
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${baseUrl}/auth/callback`,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
